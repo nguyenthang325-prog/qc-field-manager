@@ -15,7 +15,7 @@ No test suite is configured.
 
 ## Architecture
 
-This is a **mobile-first PWA** built with React 19 + Vite. The entire application lives in a single file: [src/App.jsx](src/App.jsx) (~1350 lines). There is no router — navigation is managed entirely through React `useState`.
+This is a **mobile-first PWA** built with React 19 + Vite. The entire application lives in a single file: [src/App.jsx](src/App.jsx) (~1478 lines). There is no router — navigation is managed entirely through React `useState`.
 
 ### Navigation model
 
@@ -30,13 +30,13 @@ The checklist flow is three levels deep: `CLScreen` (category picker) → `Sessi
 
 | Component | Tab/context | Purpose |
 |---|---|---|
-| `Dash` | `home` | Dashboard: defect counts, overdue samples, latest diary entry |
+| `Dash` | `home` | Dashboard: defect counts, overdue banner, latest diary entry |
 | `CLScreen` | `checklist` | Category selector for all checklist types |
 | `SessionListScreen` | `checklist` + `st` | Per-type session history (create / open / delete) |
 | `GenCL` | `checklist` + `st` + `activeSession` | Checklist execution with pass/fail/N/A, photos, remediation notes, PDF export |
 | `NKScreen` | `nhatky` | Construction diary (tc tab) + defect tracker (loi tab) |
 | `TNScreen` | `thinghiem` | Sample quantity calculator + test-date reminder tracker |
-| `WeeklyReportScreen` | `baocao` | Weekly PDF report + email via `mailto:` |
+| `WeeklyReportScreen` | `baocao` | Weekly PDF report + analytics dashboard + settings (3 tabs) |
 | `XLSXScreen` | `maubieu` | Upload owner-provided `.xlsx` forms, fill result columns, export PDF |
 | `TCVNScreen` | `tcvn` | Searchable TCVN standards + NĐ 06/2021 legal reference |
 | `SSScreen` | `saiso` | Construction tolerance quick-reference table |
@@ -61,7 +61,7 @@ All reference data is hardcoded as constants near the top of [src/App.jsx](src/A
 | Key | Content |
 |---|---|
 | `qcm_sessions` | All checklist sessions (results, photos as base64, metadata) |
-| `qcm_loi` | Defect list |
+| `qcm_loi` | Defect list (bao gồm các trường mới: thauphu, deadline, closureNote, closurePhotos, closedAt) |
 | `qcm_nk` | Construction diary entries |
 | `qcm_sp` | Test sample reminders |
 | `qcm_gen` | General checklist pass/fail state |
@@ -76,9 +76,10 @@ PDF generation uses `window.open()` with raw HTML string + `window.print()` — 
 
 ### PWA
 
-- Service worker: [public/sw.js](public/sw.js) — stale-while-revalidate caching strategy
+- Service worker: [public/sw.js](public/sw.js) — stale-while-revalidate, cache key `qcf-v3`
 - Manifest: [public/manifest.json](public/manifest.json)
 - Registered in [src/main.jsx](src/main.jsx)
+- **Quan trọng**: mỗi khi deploy bundle mới, phải bump cache key trong `sw.js` (qcf-v3 → qcf-v4...) để người dùng nhận bản mới thay vì bị kẹt ở cache cũ
 
 ### Styling
 
@@ -90,11 +91,39 @@ All icons are rendered by the `Ic` component (inline SVGs), selected by the `n` 
 
 ---
 
+## Deployment
+
+**Production URL:** `https://qc-field-manager.vercel.app`
+
+**Auto-deploy:** Vercel kết nối GitHub, push lên `main` → tự động deploy.
+
+**vercel.json quan trọng:**
+```json
+{"buildCommand":"npm run build","outputDirectory":"dist","installCommand":"npm install --include=dev","framework":"vite"}
+```
+`--include=dev` là bắt buộc vì Vercel chạy `NODE_ENV=production` mặc định, sẽ bỏ qua `devDependencies` (trong đó có `vite`). Nếu thiếu flag này → `vite: command not found` → build fail.
+
+---
+
 ## Lịch sử phát triển & Trạng thái hiện tại
 
-### Sprint: Nâng cấp QC/QA cho Tổng thầu (hoàn thành 2026-06-08)
+### Sprint 1: Tính năng cơ bản (trước 2026-06-08)
 
-#### Tính năng 1: Defect Accountability — ✅ HOÀN THÀNH
+Các tính năng gốc đã hoàn thành và ổn định:
+- Checklist nghiệm thu theo TCVN 4453, 9377, 9065
+- Nhật ký thi công
+- Quản lý mẫu thí nghiệm
+- Báo cáo tuần PDF
+- Tra cứu TCVN + NĐ 06/2021
+- Bảng sai số thi công
+- XLSX form upload + export PDF
+- Hướng dẫn khẩn cấp (FAB)
+
+---
+
+### Sprint 2: Nâng cấp QC/QA cho Tổng thầu — ✅ HOÀN THÀNH & DEPLOYED (2026-06-08)
+
+#### Tính năng 1: Defect Accountability — ✅ Live
 
 Mục tiêu: Mỗi lỗi gắn thầu phụ + deadline + bằng chứng đóng lỗi.
 
@@ -106,16 +135,16 @@ Mục tiêu: Mỗi lỗi gắn thầu phụ + deadline + bằng chứng đóng l
   - `closurePhotos` — ảnh bằng chứng (base64[], optional)
   - `closedAt` — timestamp khi đóng lỗi (ISO string)
 - **Form tạo lỗi** (`NKScreen`): thêm 2 field "👷 Thầu phụ" + "📅 Hạn sửa" trong grid 2 cột
-- **Closure modal**: intercept transition → "Đã xong" bằng cách bắt trong `onClick` của edit button; thay vì update trực tiếp, mở modal yêu cầu `closureNote` (bắt buộc) + ảnh (tùy chọn)
+- **Closure modal**: intercept transition → "Đã xong"; modal yêu cầu `closureNote` bắt buộc + ảnh tùy chọn
 - **Card hiển thị lỗi**: badge `👷 {thauphu}`, badge `📅 {deadline}` (đỏ nếu quá hạn), badge `✓ Đã đóng`
-- **Filter "Quá hạn"**: button đỏ với count badge, lọc lỗi có deadline < today và tt ≠ "Đã xong"
+- **Filter "Quá hạn"**: button đỏ với count badge, lọc `deadline < today && tt !== "Đã xong"`
 - **Dashboard alert**: banner đỏ `🔴 {n} lỗi QUÁ HẠN deadline` trên tab Home
 
 **Quyết định kỹ thuật:**
-- Backward-compatible: các trường mới đều optional, dữ liệu cũ không bị ảnh hưởng
-- Dùng `setClosingLoi` state thay vì thêm button riêng — tránh thay đổi layout card hiện tại
+- Backward-compatible: các trường mới đều optional → dữ liệu cũ không bị ảnh hưởng
+- Dùng `setClosingLoi` state thay vì thêm button riêng → tránh thay đổi layout card hiện tại
 
-#### Tính năng 2: Quality Analytics Dashboard — ✅ HOÀN THÀNH
+#### Tính năng 2: Quality Analytics Dashboard — ✅ Live
 
 Mục tiêu: Tổng thầu nhìn được sức khỏe chất lượng qua số liệu.
 
@@ -128,28 +157,67 @@ Mục tiêu: Tổng thầu nhìn được sức khỏe chất lượng qua số 
 - **Truyền `sessions` prop**: `App` gọi `getSessions()` và truyền vào `WeeklyReportScreen`
 
 **Quyết định kỹ thuật:**
-- Không dùng chart library — CSS bar chart thuần (div với `width: X%`) để giữ bundle nhỏ và offline-first
-- IIFE pattern trong JSX (`{(() => { /* compute */ return <jsx> })()}`) để scope biến analytics cục bộ, tránh ô nhiễm top-level component scope
+- Không dùng chart library — CSS bar chart thuần (`div` với `width: X%`) → bundle nhỏ, offline-first
+- IIFE pattern trong JSX (`{(() => { /* compute */ return <jsx> })()}`) → scope biến analytics cục bộ, tránh ô nhiễm component scope
 
-**Build status:** `npm run build` — ✅ Pass (`✓ built in 211ms`, 0 errors)
+#### Fix deployment (cùng session) — ✅ Resolved
+
+- **Vấn đề**: `vercel.json` bị xóa tình cờ trong sprint trước → Vercel dùng config mặc định → `vite: command not found` vì `NODE_ENV=production` bỏ qua `devDependencies`
+- **Fix**: Khôi phục `vercel.json` với `"installCommand":"npm install --include=dev"`
+- **Service worker**: Bump cache key `qcf-v2` → `qcf-v3` để force invalidation, người dùng nhận bundle mới
+
+**Commits sprint này:**
+```
+eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
+827b77c fix: bump SW cache to qcf-v3 to force cache invalidation on update
+7e28a6f fix: restore vercel.json for production deployment
+7b39eff feat: add defect accountability + quality analytics dashboard
+```
+
+**Build status:** `npm run build` — ✅ Pass (`✓ built in 519ms`, 0 errors, 17 modules)
+
+---
+
+## Trạng thái hiện tại (2026-06-08)
+
+| Hạng mục | Trạng thái |
+|---|---|
+| Production URL | ✅ `https://qc-field-manager.vercel.app` — live |
+| Build | ✅ Pass, 519ms |
+| Service worker cache | ✅ `qcf-v3` — sẵn sàng serve bản mới |
+| Defect Accountability | ✅ Deployed và hoạt động |
+| Quality Analytics | ✅ Deployed và hoạt động |
+| Auto-deploy từ GitHub | ✅ Kết nối — push main → deploy tự động |
+| `vercel.json` | ✅ Đúng với `--include=dev` |
 
 ---
 
 ## Bước tiếp theo gợi ý
 
 ### Ưu tiên cao
-1. **Kiểm tra UI trực quan** — chạy `npm run dev` trong terminal VSCode, test các flow:
-   - Tạo lỗi mới với thầu phụ + deadline
-   - Đổi lỗi sang "Đã xong" → xác nhận modal xuất hiện đúng
-   - Để lỗi quá deadline → kiểm tra badge đỏ + cảnh báo home
-   - Mở tab Báo cáo → Phân tích → kiểm tra các widget hiển thị
-2. **Deploy lên Vercel** — nếu cần cập nhật production (file `vercel.json` đã bị xóa trong sprint trước, cần kiểm tra)
+1. **Filter thầu phụ trong tab Lỗi** — hiện tại filter chỉ có Tất cả / Mới / Đang xử lý / Đã xong / Quá hạn; thêm dropdown filter theo tên thầu phụ → impact cao khi có nhiều thầu phụ, ~30 phút
+2. **Backup/Restore dữ liệu** — export toàn bộ localStorage ra JSON + import lại → giải quyết vấn đề chuyển dữ liệu giữa thiết bị (quan trọng vì hiện tại dữ liệu chỉ tồn tại trên 1 browser)
 
 ### Ưu tiên trung bình
-3. **Filter thầu phụ trong tab Lỗi** — hiện tại filter chỉ có Tất cả / Mới / Đang xử lý / Đã xong / Quá hạn; có thể thêm dropdown filter theo tên thầu phụ
-4. **Export báo cáo thầu phụ** — nút "Xuất PDF" riêng cho bảng phân tích thầu phụ từ tab Phân tích
-5. **Thông báo deadline** — dùng Web Notifications API để cảnh báo lỗi sắp hết hạn (cần permission)
+3. **Export PDF bảng thầu phụ** — nút "Xuất PDF" riêng cho bảng phân tích trong tab Phân tích
+4. **Thông báo deadline** — Web Notifications API cảnh báo lỗi sắp hết hạn (cần user grant permission)
+5. **Xem ảnh closure** — trong card lỗi đã đóng, thêm nút xem `closurePhotos` (hiện tại ảnh được lưu nhưng chưa có UI xem lại)
 
 ### Ưu tiên thấp / Tương lai
-6. **Đa dự án** — hiện app chỉ hỗ trợ 1 dự án; có thể thêm project switcher
-7. **Sync dữ liệu** — backup/restore JSON để chuyển dữ liệu giữa thiết bị
+6. **Đa dự án** — hiện app chỉ hỗ trợ 1 dự án; thêm project switcher
+7. **Gantt chart đơn giản** — timeline defect theo tuần trong tab Phân tích
+
+---
+
+## Quyết định quan trọng & Lý do
+
+| Quyết định | Lý do |
+|---|---|
+| Monolith `App.jsx` (~1478 dòng) | Không cần router, deploy/maintain đơn giản, không có backend team |
+| Inline styles only | Không phụ thuộc CSS framework, dễ đọc và sửa trực tiếp |
+| Closure modal thay vì nút riêng | Không thay đổi layout card hiện tại; người dùng quen flow đổi trạng thái |
+| CSS bar chart, không dùng library | Giữ bundle < 700KB; app phải hoạt động offline |
+| IIFE pattern cho analytics | Scope biến cục bộ trong JSX mà không cần tách component mới |
+| `--include=dev` trong installCommand | Vercel đặt `NODE_ENV=production` → npm bỏ qua devDependencies → vite không tìm thấy |
+| Bump SW cache key khi deploy | Stale-while-revalidate phục vụ cached bundle trước; nếu không bump key, người dùng bị kẹt ở bản cũ vô thời hạn |
+| Backward-compatible data model | Các trường `thauphu`, `deadline`... là optional → dữ liệu lỗi cũ trong localStorage không bị break |
