@@ -1,0 +1,19 @@
+{
+  "name": "QC Field Manager",
+  "short_name": "QC Field",
+  "description": "Quản lý chất lượng công trường xây dựng",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e3a8a",
+  "theme_color": "#1e3a8a",
+  "orientation": "portrait-primary",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
