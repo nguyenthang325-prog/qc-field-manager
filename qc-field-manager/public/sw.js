@@ -1,4 +1,4 @@
-const CACHE = 'qcf-v2';
+const CACHE = 'qcf-v3';
 
 // Khi cài đặt: cache trang chính
 self.addEventListener('install', event => {
