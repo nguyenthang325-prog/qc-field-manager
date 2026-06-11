@@ -50,9 +50,10 @@ create policy "allow all dt_docs" on dt_docs for all using (true) with check (tr
 create extension if not exists pgcrypto;
 
 -- Xác thực PIN phía server, tránh lộ pin_hash ra client.
+-- search_path gồm cả 'extensions' vì Supabase cài pgcrypto (digest) ở schema extensions.
 create or replace function dt_verify_pin(p_code text, p_pin text)
 returns boolean language sql security definer
-set search_path = public as $$
+set search_path = public, extensions as $$
   select exists(
     select 1 from dt_projects
     where code = p_code
