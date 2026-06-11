@@ -31,9 +31,20 @@ create table if not exists dt_docs (
   tags jsonb default '[]',
   link_drive text,
   ghi_chu text,
+  so_tham_chieu text,
+  noi_dung text,
+  ngay_trinh date,
+  ngay_tvgs_duyet date,
+  ngay_bql_duyet date,
   history jsonb default '[]',
   created_at timestamptz default now()
 );
+-- Cho DB đã tồn tại trước khi có quy trình duyệt 3 mốc:
+alter table dt_docs add column if not exists so_tham_chieu text;
+alter table dt_docs add column if not exists noi_dung text;
+alter table dt_docs add column if not exists ngay_trinh date;
+alter table dt_docs add column if not exists ngay_tvgs_duyet date;
+alter table dt_docs add column if not exists ngay_bql_duyet date;
 
 -- Enable RLS
 alter table dt_projects enable row level security;

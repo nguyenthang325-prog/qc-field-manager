@@ -27,6 +27,11 @@ function mapToDB(doc, code) {
     tags: doc.tags || [],
     link_drive: doc.linkDrive || null,
     ghi_chu: doc.ghiChu || null,
+    so_tham_chieu: doc.soThamChieu || null,
+    noi_dung: doc.noiDung || null,
+    ngay_trinh: doc.ngayTrinh || null,
+    ngay_tvgs_duyet: doc.ngayTvgsDuyet || null,
+    ngay_bql_duyet: doc.ngayBqlDuyet || null,
     history: doc.history || [],
     created_at: doc.createdAt || new Date().toISOString(),
   };
@@ -51,6 +56,11 @@ function mapFromDB(row) {
     tags: row.tags || [],
     linkDrive: row.link_drive || '',
     ghiChu: row.ghi_chu || '',
+    soThamChieu: row.so_tham_chieu || '',
+    noiDung: row.noi_dung || '',
+    ngayTrinh: row.ngay_trinh || '',
+    ngayTvgsDuyet: row.ngay_tvgs_duyet || '',
+    ngayBqlDuyet: row.ngay_bql_duyet || '',
     history: row.history || [],
     createdAt: row.created_at,
   };
@@ -546,13 +556,18 @@ function DetailPanel({ doc, onClose, onEdit, onDelete, onStatusChange }) {
 
         <div style={{ padding: "0 20px 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
           {[
+            ["Số tham chiếu", doc.soThamChieu],
+            ["Nội dung", doc.noiDung],
             ["Dự án", doc.duAn],
             ["Đơn vị gửi", doc.donViGui],
             ["Đơn vị nhận", doc.donViNhan],
             ["Người phụ trách", doc.nguoiPhuTrach],
+            ["Ngày trình", formatDate(doc.ngayTrinh)],
+            ["TVGS duyệt", formatDate(doc.ngayTvgsDuyet)],
+            ["BQL duyệt", formatDate(doc.ngayBqlDuyet)],
             ["Hạn nộp DK", formatDate(doc.ngayNopDuKien)],
             ["SLA", doc.slaNgay ? `${doc.slaNgay} ngày` : "—"],
-            ["Ngày hết hạn", formatDate(doc.ngayHetHan)],
+            ["Hạn xử lý", formatDate(doc.ngayHetHan)],
             ["Hoàn thành", formatDate(doc.ngayHoanThanh)],
           ].map(([label, val]) => val && val !== "—" ? (
             <div key={label}>
@@ -851,20 +866,32 @@ function OverdueScreen({ docs, onDetail }) {
 }
 
 // ── DOC FORM MODAL ────────────────────────────────────────────────────────────
-function DocFormModal({ editDoc, onClose, onSave }) {
-  const empty = { id: "", soHieuDoc: "", tenDoc: "", loaiDoc: "thiet_ke", duAn: "", donViGui: "", donViNhan: "", trangThai: "cho_nop", ngayNopDuKien: "", ngayHetHan: "", ngayHoanThanh: "", slaNgay: SLA_DEFAULTS.thiet_ke, soLanTraLai: 0, nguoiPhuTrach: "", ghiChu: "", linkDrive: "", tags: [], history: [], createdAt: nowIso() };
+function DocFormModal({ editDoc, settings = {}, onClose, onSave }) {
+  const empty = { id: "", soHieuDoc: "", tenDoc: "", loaiDoc: "thiet_ke", duAn: "", donViGui: "", donViNhan: "", trangThai: "cho_nop", ngayNopDuKien: "", ngayHetHan: "", ngayHoanThanh: "", slaNgay: SLA_DEFAULTS.thiet_ke, soLanTraLai: 0, nguoiPhuTrach: "", ghiChu: "", linkDrive: "", soThamChieu: "", noiDung: "", ngayTrinh: "", ngayTvgsDuyet: "", ngayBqlDuyet: "", tags: [], history: [], createdAt: nowIso() };
   const [form, setForm] = useState(editDoc ? { ...empty, ...editDoc } : empty);
   const [slaManual, setSlaManual] = useState(false);
   const [tagInput, setTagInput] = useState("");
+
+  const lblTrinh = `Ngày trình${settings.donViTrinh ? ` (${settings.donViTrinh})` : ""}`;
+  const lblTvgs = `TVGS duyệt${settings.donViTvgs ? ` (${settings.donViTvgs})` : ""}`;
+  const lblBql = `BQL duyệt${settings.donViBql ? ` (${settings.donViBql})` : ""}`;
 
   function f(field, val) {
     setForm(prev => {
       const next = { ...prev, [field]: val };
       if (field === "loaiDoc" && !slaManual) next.slaNgay = SLA_DEFAULTS[val] || 7;
-      if ((field === "ngayNopDuKien" || field === "slaNgay") && !slaManual && next.ngayNopDuKien) {
-        next.ngayHetHan = addDays(next.ngayNopDuKien, Number(next.slaNgay) || 0);
+      // Hạn xử lý tính từ Ngày trình (nếu có) hoặc Ngày nộp dự kiến + SLA
+      if ((field === "ngayNopDuKien" || field === "ngayTrinh" || field === "slaNgay") && !slaManual) {
+        const base = next.ngayTrinh || next.ngayNopDuKien;
+        if (base) next.ngayHetHan = addDays(base, Number(next.slaNgay) || 0);
       }
       if (field === "ngayHetHan") setSlaManual(true);
+      // Tự suy trạng thái theo mốc duyệt
+      if (field === "ngayBqlDuyet" && val) {
+        next.trangThai = "da_duyet";
+        if (!next.ngayHoanThanh) next.ngayHoanThanh = val;
+      }
+      if (field === "ngayTvgsDuyet" && val && next.trangThai === "cho_nop") next.trangThai = "dang_duyet";
       return next;
     });
   }
@@ -877,8 +904,14 @@ function DocFormModal({ editDoc, onClose, onSave }) {
   function removeTag(t) { setForm(prev => ({ ...prev, tags: prev.tags.filter(x => x !== t) })); }
 
   function handleSave() {
-    if (!form.tenDoc.trim()) return alert("Vui lòng nhập tên tài liệu");
-    onSave(form);
+    if (!form.tenDoc.trim()) return alert('Vui lòng nhập "Về việc" (tên hồ sơ)');
+    let toSave = form;
+    // Hồ sơ đã duyệt mà chưa có link → nhắc dán link bản phê duyệt
+    if ((form.ngayBqlDuyet || form.trangThai === "da_duyet") && !String(form.linkDrive || "").trim()) {
+      const link = window.prompt("Hồ sơ đã được duyệt — dán link bản phê duyệt trên Drive (bỏ trống nếu chưa có):", "");
+      if (link && link.trim()) toSave = { ...form, linkDrive: link.trim() };
+    }
+    onSave(toSave);
     onClose();
   }
 
@@ -898,15 +931,17 @@ function DocFormModal({ editDoc, onClose, onSave }) {
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}><Ic n="x" s={22} /></button>
         </div>
         <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-          {inp("Tên tài liệu", "tenDoc", "text", { req: true })}
+          {inp("Về việc (tên hồ sơ)", "tenDoc", "text", { req: true })}
+          {inp("Nội dung", "noiDung")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {inp("Số hiệu / Ký hiệu", "soHieuDoc")}
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>Loại tài liệu <span style={{ color: RED }}>*</span></label>
-              <select value={form.loaiDoc} onChange={e => f("loaiDoc", e.target.value)} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none" }}>
-                {ALL_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
-              </select>
-            </div>
+            {inp("Mã hồ sơ / Ký hiệu", "soHieuDoc")}
+            {inp("Số tham chiếu", "soThamChieu")}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>Loại tài liệu <span style={{ color: RED }}>*</span></label>
+            <select value={form.loaiDoc} onChange={e => f("loaiDoc", e.target.value)} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none" }}>
+              {ALL_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+            </select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>Trạng thái <span style={{ color: RED }}>*</span></label>
@@ -931,6 +966,15 @@ function DocFormModal({ editDoc, onClose, onSave }) {
             </div>
             {inp("Số lần trả lại", "soLanTraLai", "number")}
             {form.trangThai === "da_duyet" && inp("Ngày hoàn thành", "ngayHoanThanh", "date")}
+          </div>
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>Quy trình duyệt</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              {inp(lblTrinh, "ngayTrinh", "date")}
+              {inp(lblTvgs, "ngayTvgsDuyet", "date")}
+              {inp(lblBql, "ngayBqlDuyet", "date")}
+            </div>
+            <span style={{ fontSize: 11, color: "#94a3b8" }}>Điền ngày BQL duyệt sẽ tự đặt trạng thái "Đã duyệt".</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: "#475569", display: "flex", alignItems: "center", gap: 4 }}><Ic n="tag" s={13} c="#64748b" /> Tags (nhập + Enter)</label>
@@ -986,11 +1030,18 @@ function SettingsScreen({ settings: parentSettings, onSave, onImport, onExport }
   return (
     <div style={{ padding: 32, overflowY: "auto", flex: 1 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 24 }}>Cài đặt</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 500, marginBottom: 32 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 500, marginBottom: 24 }}>
         {inp("Tên dự án", "tenDuAn")}
         {inp("Đơn vị chủ đầu tư", "chuDauTu")}
-        {inp("Đơn vị tư vấn giám sát", "tvgs")}
         {inp("Kỹ sư phụ trách", "kysu")}
+      </div>
+      <div style={{ maxWidth: 500, marginBottom: 32, padding: "14px 18px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12, fontWeight: 700 }}>Đơn vị quy trình duyệt (hiện trên form xuất Excel)</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {inp("Đơn vị trình (nhà thầu)", "donViTrinh")}
+          {inp("Tư vấn giám sát (TVGS)", "donViTvgs")}
+          {inp("Ban quản lý (BQL)", "donViBql")}
+        </div>
       </div>
       <div style={{ display: "flex", gap: 12 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 8, background: NAVY, color: "#fff", padding: "10px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
@@ -1053,16 +1104,27 @@ function PrintView({ docs, settings }) {
 }
 
 // ── XLSX EXPORT ───────────────────────────────────────────────────────────────
-function exportToXLSX(docs) {
-  const headers = ["Số hiệu", "Tên tài liệu", "Loại", "Dự án", "Đơn vị gửi", "Đơn vị nhận", "Trạng thái", "Ngày nộp DK", "Ngày hết hạn", "Hoàn thành", "SLA", "Số lần trả", "Người PT", "Tags", "Link Drive", "Ghi chú"];
-  const rows = docs.map(d => [
-    d.soHieuDoc, d.tenDoc, TYPE_LABELS[d.loaiDoc] || d.loaiDoc, d.duAn, d.donViGui, d.donViNhan,
-    STATUS_LABELS[d.trangThai] || d.trangThai,
-    formatDate(d.ngayNopDuKien), formatDate(d.ngayHetHan), formatDate(d.ngayHoanThanh),
-    d.slaNgay, d.soLanTraLai, d.nguoiPhuTrach, (d.tags || []).join(", "), d.linkDrive, d.ghiChu
+function exportToXLSX(docs, settings = {}) {
+  const fd = iso => iso ? formatDate(iso) : "";
+  const sub = (label, org) => org ? `${label} (${org})` : label;
+  // Tiêu đề 2 dòng: dòng 1 các cột chính + "Thời gian" gộp 3 cột; dòng 2 là 3 cột con của Thời gian
+  const row1 = ["STT", "Mã hồ sơ", "Về việc", "Nội dung", "Số tham chiếu", "Thời gian", null, null, "Hạn xử lý", "Tình trạng", "Link hồ sơ", "Ghi chú"];
+  const row2 = [null, null, null, null, null, sub("Ngày trình", settings.donViTrinh), sub("TVGS duyệt", settings.donViTvgs), sub("BQL duyệt", settings.donViBql), null, null, null, null];
+  const dataRows = docs.map((d, i) => [
+    i + 1, d.soHieuDoc, d.tenDoc, d.noiDung, d.soThamChieu,
+    fd(d.ngayTrinh), fd(d.ngayTvgsDuyet), fd(d.ngayBqlDuyet),
+    fd(d.ngayHetHan), STATUS_LABELS[d.trangThai] || d.trangThai, d.linkDrive, d.ghiChu
   ]);
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws["!cols"] = [12, 30, 18, 20, 20, 20, 14, 14, 14, 14, 8, 10, 18, 20, 30, 30].map(w => ({ wch: w }));
+  const ws = XLSX.utils.aoa_to_sheet([row1, row2, ...dataRows]);
+  // Gộp ô tiêu đề: các cột đơn span 2 dòng; "Thời gian" span 3 cột ở dòng 1
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }, { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, { s: { r: 0, c: 5 }, e: { r: 0, c: 7 } },
+    { s: { r: 0, c: 8 }, e: { r: 1, c: 8 } }, { s: { r: 0, c: 9 }, e: { r: 1, c: 9 } },
+    { s: { r: 0, c: 10 }, e: { r: 1, c: 10 } }, { s: { r: 0, c: 11 }, e: { r: 1, c: 11 } },
+  ];
+  ws["!cols"] = [5, 13, 28, 28, 14, 13, 13, 13, 13, 12, 30, 28].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Hồ sơ");
   XLSX.writeFile(wb, `doc-tracker-${isoToday()}.xlsx`);
@@ -1089,41 +1151,66 @@ function importFromXLSX(file, existingDocs, onDone) {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
     if (rows.length < 2) return onDone(existingDocs, 0);
-    const hdrs = (rows[0] || []).map(h => normalizeStr(String(h || "")));
-    const col = name => hdrs.findIndex(h => h.includes(normalizeStr(name)));
-    const iSoHieu = col("so hieu"); const iTen = col("ten tai lieu"); const iLoai = col("loai");
+    const norm = r => (r || []).map(x => normalizeStr(String(x || "")));
+    // Tìm dòng tiêu đề; hỗ trợ tiêu đề 2 dòng (nhóm "Thời gian")
+    const isHdr = r => { const j = norm(r).join("|"); return j.includes("ma ho so") || j.includes("ve viec") || j.includes("so hieu") || j.includes("ten tai lieu"); };
+    let h0 = rows.findIndex(isHdr); if (h0 < 0) h0 = 0;
+    const nextJoin = norm(rows[h0 + 1]).join("|");
+    const twoRow = nextJoin.includes("ngay trinh") || nextJoin.includes("tvgs") || nextJoin.includes("bql");
+    const hdrRows = twoRow ? [rows[h0], rows[h0 + 1]] : [rows[h0]];
+    const dataStart = twoRow ? h0 + 2 : h0 + 1;
+    const maxCols = Math.max(0, ...hdrRows.map(r => (r || []).length));
+    const combined = [];
+    for (let c = 0; c < maxCols; c++) combined[c] = hdrRows.map(r => normalizeStr(String((r || [])[c] || ""))).filter(Boolean).join(" ");
+    const col = (...names) => { for (const n of names) { const i = combined.findIndex(h => h.includes(normalizeStr(n))); if (i >= 0) return i; } return -1; };
+    const iSoHieu = col("ma ho so", "so hieu"); const iTen = col("ve viec", "ten tai lieu", "ten ho so");
+    const iNoiDung = col("noi dung"); const iSoTC = col("so tham chieu", "tham chieu"); const iLoai = col("loai");
     const iDuAn = col("du an"); const iDGui = col("don vi gui"); const iDNhan = col("don vi nhan");
-    const iTT = col("trang thai"); const iNopDK = col("ngay nop"); const iHetHan = col("ngay het");
-    const iHoanThanh = col("hoan thanh"); const iSLA = col("sla"); const iTraLai = col("so lan tra");
+    const iTrinh = col("ngay trinh"); const iTvgs = col("tvgs"); const iBql = col("bql");
+    const iHan = col("han xu ly", "ngay het"); const iNopDK = col("ngay nop"); const iHoanThanh = col("hoan thanh");
+    const iSLA = col("sla", "so ngay"); const iTraLai = col("so lan tra"); const iTT = col("tinh trang", "trang thai");
     const iNguoiPT = col("nguoi"); const iTags = col("tag"); const iLink = col("link"); const iGhiChu = col("ghi chu");
     const typeMap = { "thiet ke": "thiet_ke", "bv": "thiet_ke", "nghiem thu": "nghiem_thu", "nt": "nghiem_thu", "phap ly": "phap_ly", "gp": "phap_ly", "hanh chinh": "hanh_chinh", "hc": "hanh_chinh" };
     const statusMap = { "cho nop": "cho_nop", "cho gui": "cho_nop", "dang duyet": "dang_duyet", "da duyet": "da_duyet", "hoan thanh": "da_duyet" };
+    const cell = (row, i) => i >= 0 ? row[i] : undefined;
+    const str = (row, i) => String(cell(row, i) ?? "").trim();
     const newDocs = [];
-    rows.slice(1).forEach((row, idx) => {
-      const tenDoc = String(row[iTen] || "").trim();
+    rows.slice(dataStart).forEach(row => {
+      if (!row) return;
+      const tenDoc = str(row, iTen);
       if (!tenDoc) return;
-      const soHieuDoc = String(row[iSoHieu] || "").trim();
+      const soHieuDoc = str(row, iSoHieu);
       const existing = soHieuDoc ? existingDocs.find(d => d.soHieuDoc === soHieuDoc) : null;
-      const loaiRaw = normalizeStr(String(row[iLoai] || ""));
-      const loaiDoc = Object.entries(typeMap).find(([k]) => loaiRaw.includes(k))?.[1] || "hanh_chinh";
-      const ttRaw = normalizeStr(String(row[iTT] || ""));
-      const trangThai = Object.entries(statusMap).find(([k]) => ttRaw.includes(k))?.[1] || "cho_nop";
+      // Cột vắng trong file → giữ giá trị cũ (nếu đang cập nhật), tránh ghi đè mất dữ liệu
+      const keep = (i, parsed, prevVal, dflt) => i >= 0 ? parsed : (existing ? prevVal : dflt);
+      const loaiRaw = normalizeStr(str(row, iLoai));
+      const loaiParsed = Object.entries(typeMap).find(([k]) => loaiRaw.includes(k))?.[1] || "hanh_chinh";
+      const loaiDoc = keep(iLoai, loaiParsed, existing?.loaiDoc, "hanh_chinh");
+      const ngayBqlDuyet = parseImportDate(cell(row, iBql));
+      const ttRaw = normalizeStr(str(row, iTT));
+      let trangThai = Object.entries(statusMap).find(([k]) => ttRaw.includes(k))?.[1] || keep(iTT, "cho_nop", existing?.trangThai, "cho_nop");
+      if (ngayBqlDuyet) trangThai = "da_duyet";
       const doc = {
         id: existing ? existing.id : makeId(),
         soHieuDoc, tenDoc, loaiDoc,
-        duAn: String(row[iDuAn] || "").trim(),
-        donViGui: String(row[iDGui] || "").trim(),
-        donViNhan: String(row[iDNhan] || "").trim(),
+        noiDung: keep(iNoiDung, str(row, iNoiDung), existing?.noiDung, ""),
+        soThamChieu: keep(iSoTC, str(row, iSoTC), existing?.soThamChieu, ""),
+        duAn: keep(iDuAn, str(row, iDuAn), existing?.duAn, ""),
+        donViGui: keep(iDGui, str(row, iDGui), existing?.donViGui, ""),
+        donViNhan: keep(iDNhan, str(row, iDNhan), existing?.donViNhan, ""),
         trangThai,
-        ngayNopDuKien: parseImportDate(row[iNopDK]),
-        ngayHetHan: parseImportDate(row[iHetHan]),
-        ngayHoanThanh: parseImportDate(row[iHoanThanh]),
-        slaNgay: Number(row[iSLA]) || SLA_DEFAULTS[loaiDoc],
-        soLanTraLai: Number(row[iTraLai]) || 0,
-        nguoiPhuTrach: String(row[iNguoiPT] || "").trim(),
-        tags: String(row[iTags] || "").split(",").map(t => t.trim()).filter(Boolean),
-        linkDrive: String(row[iLink] || "").trim(),
-        ghiChu: String(row[iGhiChu] || "").trim(),
+        ngayTrinh: keep(iTrinh, parseImportDate(cell(row, iTrinh)), existing?.ngayTrinh, ""),
+        ngayTvgsDuyet: keep(iTvgs, parseImportDate(cell(row, iTvgs)), existing?.ngayTvgsDuyet, ""),
+        ngayBqlDuyet,
+        ngayNopDuKien: keep(iNopDK, parseImportDate(cell(row, iNopDK)), existing?.ngayNopDuKien, ""),
+        ngayHetHan: keep(iHan, parseImportDate(cell(row, iHan)), existing?.ngayHetHan, ""),
+        ngayHoanThanh: keep(iHoanThanh, parseImportDate(cell(row, iHoanThanh)), existing?.ngayHoanThanh, ""),
+        slaNgay: keep(iSLA, Number(cell(row, iSLA)) || SLA_DEFAULTS[loaiDoc], existing?.slaNgay, SLA_DEFAULTS[loaiDoc]),
+        soLanTraLai: keep(iTraLai, Number(cell(row, iTraLai)) || 0, existing?.soLanTraLai, 0),
+        nguoiPhuTrach: keep(iNguoiPT, str(row, iNguoiPT), existing?.nguoiPhuTrach, ""),
+        tags: iTags >= 0 ? str(row, iTags).split(",").map(t => t.trim()).filter(Boolean) : (existing?.tags || []),
+        linkDrive: keep(iLink, str(row, iLink), existing?.linkDrive, ""),
+        ghiChu: keep(iGhiChu, str(row, iGhiChu), existing?.ghiChu, ""),
         history: existing?.history || [{ date: nowIso(), action: "Import từ Excel", from: "", to: trangThai, note: "" }],
         createdAt: existing?.createdAt || nowIso(),
       };
@@ -1327,9 +1414,17 @@ export default function App() {
     const prevDocs = docs;
     const entry = { date: nowIso(), action: "Đổi trạng thái", from: doc.trangThai, to: newStatus, note: note || "" };
     const newHistory = [...(doc.history || []), entry];
-    setDocs(prev => prev.map(d => d.id === docId ? { ...d, trangThai: newStatus, history: newHistory } : d), "Đổi trạng thái");
+    // Duyệt xong mà chưa có link → nhắc dán link bản phê duyệt
+    let newLink = doc.linkDrive;
+    if (newStatus === "da_duyet" && !String(doc.linkDrive || "").trim()) {
+      const link = window.prompt("Hồ sơ đã được duyệt — dán link bản phê duyệt trên Drive (bỏ trống nếu chưa có):", "");
+      if (link && link.trim()) newLink = link.trim();
+    }
+    const patch = { trang_thai: newStatus, history: newHistory };
+    if (newLink !== doc.linkDrive) patch.link_drive = newLink;
+    setDocs(prev => prev.map(d => d.id === docId ? { ...d, trangThai: newStatus, history: newHistory, linkDrive: newLink } : d), "Đổi trạng thái");
     showToast("Đã cập nhật trạng thái");
-    const { error } = await sb.from('dt_docs').update({ trang_thai: newStatus, history: newHistory }).eq('id', docId);
+    const { error } = await sb.from('dt_docs').update(patch).eq('id', docId);
     if (error) { setDocsRaw(prevDocs); setUndoStack(s => s.slice(0, -1)); showToast('Lỗi cập nhật: ' + error.message); }
   }
 
@@ -1446,7 +1541,7 @@ export default function App() {
           <Ic n="upload" s={16} c="#fff" /> Import
           <input type="file" accept=".xlsx,.xls" onChange={e => { if (e.target.files[0]) handleImport(e.target.files[0]); e.target.value = ""; }} style={{ display: "none" }} />
         </label>
-        <button onClick={() => exportToXLSX(docs)}
+        <button onClick={() => exportToXLSX(docs, settings)}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
           <Ic n="download" s={16} c="#fff" /> Export
         </button>
@@ -1472,7 +1567,7 @@ export default function App() {
             onBatchStatus={handleBatchStatus} onBatchDelete={handleBatchDelete}
             searchRef={searchRef} />}
           {tab === "overdue" && <OverdueScreen docs={docs} onDetail={id => { setDetailId(id); setTab("docs"); }} />}
-          {tab === "settings" && <SettingsScreen settings={settings} onSave={handleSaveSettings} onImport={handleImport} onExport={() => exportToXLSX(docs)} />}
+          {tab === "settings" && <SettingsScreen settings={settings} onSave={handleSaveSettings} onImport={handleImport} onExport={() => exportToXLSX(docs, settings)} />}
         </div>
       </div>
 
@@ -1485,6 +1580,7 @@ export default function App() {
       {/* Form Modal */}
       {formState.open && <DocFormModal
         editDoc={formState.duplicateData || editDoc}
+        settings={settings}
         onClose={() => setFormState({ open: false, editId: null })}
         onSave={handleSaveDoc} />}
 
