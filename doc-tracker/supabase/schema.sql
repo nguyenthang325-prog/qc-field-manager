@@ -51,8 +51,11 @@ alter table dt_projects enable row level security;
 alter table dt_docs enable row level security;
 
 -- Allow anon read/write (project code = auth)
-create policy "allow all dt_projects" on dt_projects for all using (true) with check (true);
-create policy "allow all dt_docs" on dt_docs for all using (true) with check (true);
+-- Dùng drop+create để chạy lại được; chỉ định rõ role anon/authenticated.
+drop policy if exists "allow all dt_projects" on dt_projects;
+create policy "allow all dt_projects" on dt_projects for all to anon, authenticated using (true) with check (true);
+drop policy if exists "allow all dt_docs" on dt_docs;
+create policy "allow all dt_docs" on dt_docs for all to anon, authenticated using (true) with check (true);
 
 -- ── CỔNG PIN (rào ở tầng app) ────────────────────────────────────────────────
 -- LƯU Ý BẢO MẬT: anon key nằm trong bundle client + RLS đang mở (using true), nên
