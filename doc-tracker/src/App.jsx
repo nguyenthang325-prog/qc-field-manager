@@ -1,5 +1,55 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
+import { sb } from './supabase.js';
+
+function mapToDB(doc, code) {
+  return {
+    id: doc.id,
+    project_code: code,
+    so_hieu_doc: doc.soHieuDoc || null,
+    ten_doc: doc.tenDoc,
+    loai_doc: doc.loaiDoc || null,
+    du_an: doc.duAn || null,
+    don_vi_gui: doc.donViGui || null,
+    don_vi_nhan: doc.donViNhan || null,
+    trang_thai: doc.trangThai || 'cho_nop',
+    ngay_nop_du_kien: doc.ngayNopDuKien || null,
+    ngay_het_han: doc.ngayHetHan || null,
+    ngay_hoan_thanh: doc.ngayHoanThanh || null,
+    sla_ngay: doc.slaNgay || null,
+    so_lan_tra_lai: doc.soLanTraLai || 0,
+    nguoi_phu_trach: doc.nguoiPhuTrach || null,
+    tags: doc.tags || [],
+    link_drive: doc.linkDrive || null,
+    ghi_chu: doc.ghiChu || null,
+    history: doc.history || [],
+    created_at: doc.createdAt || new Date().toISOString(),
+  };
+}
+
+function mapFromDB(row) {
+  return {
+    id: row.id,
+    soHieuDoc: row.so_hieu_doc || '',
+    tenDoc: row.ten_doc,
+    loaiDoc: row.loai_doc || '',
+    duAn: row.du_an || '',
+    donViGui: row.don_vi_gui || '',
+    donViNhan: row.don_vi_nhan || '',
+    trangThai: row.trang_thai || 'cho_nop',
+    ngayNopDuKien: row.ngay_nop_du_kien || '',
+    ngayHetHan: row.ngay_het_han || '',
+    ngayHoanThanh: row.ngay_hoan_thanh || '',
+    slaNgay: row.sla_ngay || SLA_DEFAULTS[row.loai_doc] || 14,
+    soLanTraLai: row.so_lan_tra_lai || 0,
+    nguoiPhuTrach: row.nguoi_phu_trach || '',
+    tags: row.tags || [],
+    linkDrive: row.link_drive || '',
+    ghiChu: row.ghi_chu || '',
+    history: row.history || [],
+    createdAt: row.created_at,
+  };
+}
 
 const NAVY = "#1e3a8a";
 const RED = "#ef4444"; const RED_BG = "#fef2f2";
@@ -923,9 +973,15 @@ function DocFormModal({ editDoc, onClose, onSave }) {
 }
 
 // ── SETTINGS SCREEN ───────────────────────────────────────────────────────────
-function SettingsScreen({ onImport, onExport }) {
-  const [settings, setSettings] = useState(getSettings);
-  function save(field, val) { const s = { ...settings, [field]: val }; setSettings(s); saveSettings(s); }
+function SettingsScreen({ settings: parentSettings, onSave, onImport, onExport }) {
+  const [settings, setSettings] = useState(parentSettings);
+  const timer = useRef(null);
+  function save(field, val) {
+    const s = { ...settings, [field]: val };
+    setSettings(s);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => onSave(s), 600);
+  }
   const inp = (label, field) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <label style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>{label}</label>
@@ -964,9 +1020,8 @@ function SettingsScreen({ onImport, onExport }) {
 }
 
 // ── PRINT VIEW ────────────────────────────────────────────────────────────────
-function PrintView({ docs }) {
+function PrintView({ docs, settings }) {
   const today = isoToday();
-  const settings = getSettings();
   const activeDocs = docs.filter(d => d.trangThai !== "da_duyet").sort((a, b) => a.ngayHetHan < b.ngayHetHan ? -1 : 1);
   return (
     <div id="print-view" style={{ display: "none", padding: 24, fontFamily: "sans-serif" }}>
@@ -1085,9 +1140,92 @@ function importFromXLSX(file, existingDocs, onDone) {
   reader.readAsArrayBuffer(file);
 }
 
+// ── AUTH SCREEN ───────────────────────────────────────────────────────────────
+function AuthScreen({ onEnter }) {
+  const [code, setCode] = useState('');
+  const [mode, setMode] = useState('enter');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleEnter() {
+    const c = code.trim().toUpperCase();
+    if (!c) return;
+    setLoading(true); setError('');
+    const { data } = await sb.from('dt_projects').select('code').eq('code', c).single();
+    setLoading(false);
+    if (!data) { setError('Không tìm thấy dự án. Kiểm tra mã hoặc tạo mới.'); return; }
+    onEnter(c);
+  }
+
+  async function handleCreate() {
+    const c = code.trim().toUpperCase();
+    const n = name.trim();
+    if (!c || !n) { setError('Vui lòng nhập đủ mã và tên dự án.'); return; }
+    setLoading(true); setError('');
+    const { error: err } = await sb.from('dt_projects').insert({ code: c, name: n, settings: {} });
+    if (err) { setLoading(false); setError('Mã đã tồn tại hoặc lỗi hệ thống.'); return; }
+    const existing = (() => { try { return JSON.parse(localStorage.getItem('dt_docs') || '[]'); } catch { return []; } })();
+    if (existing.length > 0) {
+      await sb.from('dt_docs').insert(existing.map(d => mapToDB(d, c)));
+      localStorage.removeItem('dt_docs');
+    }
+    setLoading(false);
+    onEnter(c);
+  }
+
+  const inputStyle = { width: '100%', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box', marginBottom: 10 };
+  const btnPrimary = { width: '100%', background: NAVY, color: '#fff', border: 'none', borderRadius: 8, padding: 11, fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 10 };
+  const btnSecondary = { width: '100%', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: 10, fontSize: 13, cursor: 'pointer' };
+  const lbl = txt => <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>{txt}</label>;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f8fafc' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 40, width: 380, boxShadow: '0 4px 24px rgba(0,0,0,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+          <Ic n="doc" s={26} c={NAVY} />
+          <span style={{ fontSize: 20, fontWeight: 700, color: NAVY }}>Doc Tracker</span>
+        </div>
+        {mode === 'enter' ? (
+          <>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Nhập mã dự án để truy cập danh sách tài liệu.</p>
+            {lbl('Mã dự án')}
+            <input autoFocus value={code} onChange={e => { setCode(e.target.value.toUpperCase()); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleEnter()} placeholder="VD: DA-AB12XY" style={inputStyle} />
+            {error && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>{error}</div>}
+            <button onClick={handleEnter} disabled={loading} style={{ ...btnPrimary, opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Đang tải...' : 'Vào dự án'}
+            </button>
+            <button onClick={() => { setMode('create'); setError(''); }} style={btnSecondary}>+ Tạo dự án mới</button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Tạo không gian mới để quản lý tài liệu.</p>
+            {lbl('Mã dự án (tự đặt)')}
+            <input autoFocus value={code} onChange={e => { setCode(e.target.value.toUpperCase()); setError(''); }}
+              placeholder="VD: DA-AB12XY" style={inputStyle} />
+            {lbl('Tên dự án')}
+            <input value={name} onChange={e => { setName(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+              placeholder="Tên dự án xây dựng..." style={inputStyle} />
+            {error && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>{error}</div>}
+            <button onClick={handleCreate} disabled={loading} style={{ ...btnPrimary, opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Đang tạo...' : 'Tạo dự án'}
+            </button>
+            <button onClick={() => { setMode('enter'); setError(''); }} style={btnSecondary}>← Quay lại</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [docs, setDocsRaw] = useState(() => getDocs());
+  const [projectCode, setProjectCode] = useState(() => localStorage.getItem('dt_code') || '');
+  const [docs, setDocsRaw] = useState([]);
+  const [settings, setSettings] = useState({});
+  const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("home");
   const [loaiFilter, setLoaiFilter] = useState(null);
   const [detailId, setDetailId] = useState(null);
@@ -1098,18 +1236,36 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const searchRef = useRef();
 
+  useEffect(() => {
+    if (!projectCode) return;
+    setLoading(true);
+    Promise.all([
+      sb.from('dt_docs').select('*').eq('project_code', projectCode).order('created_at'),
+      sb.from('dt_projects').select('settings').eq('code', projectCode).single(),
+    ]).then(([{ data: docsData, error: e1 }, { data: projData }]) => {
+      if (e1) {
+        const fallback = (() => { try { return JSON.parse(localStorage.getItem('dt_docs') || '[]'); } catch { return []; } })();
+        setDocsRaw(fallback);
+        showToast('Không kết nối được — đang dùng dữ liệu cục bộ');
+      } else {
+        setDocsRaw((docsData || []).map(mapFromDB));
+      }
+      if (projData?.settings) setSettings(projData.settings);
+      setLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectCode]);
+
   const setDocs = useCallback((v, undoLabel) => {
     setDocsRaw(prev => {
       const next = typeof v === "function" ? v(prev) : v;
       if (undoLabel) setUndoStack(s => [...s.slice(-9), { label: undoLabel, snapshot: prev }]);
-      saveDocs(next);
       return next;
     });
   }, []);
 
   const showToast = msg => { setToast(msg); };
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = e => {
       const ctrl = e.ctrlKey || e.metaKey;
@@ -1120,7 +1276,7 @@ export default function App() {
         setUndoStack(s => {
           if (!s.length) return s;
           const last = s[s.length - 1];
-          setDocsRaw(last.snapshot); saveDocs(last.snapshot);
+          setDocsRaw(last.snapshot);
           showToast(`Đã hoàn tác: ${last.label}`);
           return s.slice(0, -1);
         });
@@ -1132,11 +1288,10 @@ export default function App() {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  const settings = getSettings();
   const detailDoc = detailId ? docs.find(d => d.id === detailId) : null;
   const editDoc = formState.editId ? docs.find(d => d.id === formState.editId) : null;
 
-  function handleSaveDoc(form) {
+  async function handleSaveDoc(form) {
     const isNew = !form.id || !docs.find(d => d.id === form.id);
     const docToSave = {
       ...form,
@@ -1148,23 +1303,35 @@ export default function App() {
     };
     setDocs(prev => isNew ? [...prev, docToSave] : prev.map(d => d.id === docToSave.id ? docToSave : d), isNew ? "Thêm hồ sơ mới" : "Cập nhật hồ sơ");
     showToast(isNew ? "Đã thêm hồ sơ" : "Đã cập nhật hồ sơ");
+    const row = mapToDB(docToSave, projectCode);
+    const { error } = isNew
+      ? await sb.from('dt_docs').insert(row)
+      : await sb.from('dt_docs').update(row).eq('id', docToSave.id);
+    if (error) showToast('Lỗi lưu: ' + error.message);
   }
 
-  function handleStatusChange(docId, newStatus, note) {
-    setDocs(prev => prev.map(d => {
-      if (d.id !== docId) return d;
-      const entry = { date: nowIso(), action: "Đổi trạng thái", from: d.trangThai, to: newStatus, note: note || "" };
-      return { ...d, trangThai: newStatus, history: [...(d.history || []), entry] };
-    }), "Đổi trạng thái");
+  async function handleStatusChange(docId, newStatus, note) {
+    const doc = docs.find(d => d.id === docId);
+    if (!doc) return;
+    const entry = { date: nowIso(), action: "Đổi trạng thái", from: doc.trangThai, to: newStatus, note: note || "" };
+    const newHistory = [...(doc.history || []), entry];
+    setDocs(prev => prev.map(d => d.id === docId ? { ...d, trangThai: newStatus, history: newHistory } : d), "Đổi trạng thái");
     showToast("Đã cập nhật trạng thái");
+    const { error } = await sb.from('dt_docs').update({ trang_thai: newStatus, history: newHistory }).eq('id', docId);
+    if (error) showToast('Lỗi cập nhật: ' + error.message);
   }
 
-  function handleDelete(docId) {
+  async function handleDelete(docId) {
     if (!confirm("Xóa hồ sơ này?")) return;
     const doc = docs.find(d => d.id === docId);
     setDocs(prev => prev.filter(d => d.id !== docId), `Xóa "${doc?.tenDoc || "hồ sơ"}"`);
     if (detailId === docId) setDetailId(null);
     showToast("Đã xóa hồ sơ");
+    const { error } = await sb.from('dt_docs').delete().eq('id', docId);
+    if (error) {
+      if (doc) setDocs(prev => [...prev, doc]);
+      showToast('Lỗi xóa: ' + error.message);
+    }
   }
 
   function handleDuplicate(docId) {
@@ -1175,26 +1342,61 @@ export default function App() {
   }
 
   function handleBatchStatus(newStatus) {
-    selectedIds.forEach(id => handleStatusChange(id, newStatus, "Cập nhật hàng loạt"));
+    const ids = [...selectedIds];
+    ids.forEach(id => handleStatusChange(id, newStatus, "Cập nhật hàng loạt"));
     setSelectedIds([]);
-    showToast(`Đã cập nhật ${selectedIds.length} hồ sơ`);
+    showToast(`Đã cập nhật ${ids.length} hồ sơ`);
   }
 
-  function handleBatchDelete() {
+  async function handleBatchDelete() {
     if (!confirm(`Xóa ${selectedIds.length} hồ sơ đã chọn?`)) return;
-    setDocs(prev => prev.filter(d => !selectedIds.includes(d.id)), `Xóa ${selectedIds.length} hồ sơ`);
+    const toDelete = [...selectedIds];
+    const deletedDocs = docs.filter(d => toDelete.includes(d.id));
+    setDocs(prev => prev.filter(d => !toDelete.includes(d.id)), `Xóa ${toDelete.length} hồ sơ`);
     setSelectedIds([]);
-    showToast(`Đã xóa ${selectedIds.length} hồ sơ`);
+    showToast(`Đã xóa ${toDelete.length} hồ sơ`);
+    const { error } = await sb.from('dt_docs').delete().in('id', toDelete);
+    if (error) {
+      setDocs(prev => [...prev, ...deletedDocs]);
+      showToast('Lỗi xóa: ' + error.message);
+    }
   }
 
   function handleImport(file) {
-    importFromXLSX(file, docs, (merged, count) => {
+    importFromXLSX(file, docs, async (merged, count) => {
       setDocs(merged, "Import Excel");
       showToast(`Import thành công ${count} hồ sơ`);
+      const { error } = await sb.from('dt_docs').upsert(merged.map(d => mapToDB(d, projectCode)));
+      if (error) showToast('Lỗi lưu import: ' + error.message);
     });
   }
 
+  async function handleSaveSettings(newSettings) {
+    setSettings(newSettings);
+    await sb.from('dt_projects').update({ settings: newSettings }).eq('code', projectCode);
+  }
+
+  function handleChangeProject() {
+    setProjectCode('');
+    localStorage.removeItem('dt_code');
+    setDocsRaw([]);
+    setSettings({});
+    setTab("home");
+  }
+
   const contentStyle = { flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" };
+
+  if (!projectCode) return <AuthScreen onEnter={code => { setProjectCode(code); localStorage.setItem('dt_code', code); }} />;
+
+  if (loading) return (
+    <>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
+        <div style={{ width: 36, height: 36, border: '4px solid #e2e8f0', borderTop: `4px solid ${NAVY}`, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: '#64748b', fontSize: 14 }}>Đang tải dữ liệu...</p>
+      </div>
+    </>
+  );
 
   return (
     <div id="app-shell" style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -1206,7 +1408,12 @@ export default function App() {
         <Ic n="doc" s={22} c="#93c5fd" />
         <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.3px" }}>Doc Tracker</span>
         {settings.tenDuAn && <span style={{ fontSize: 13, color: "#93c5fd", marginLeft: 4 }}>— {settings.tenDuAn}</span>}
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginLeft: 2 }}>[{projectCode}]</span>
         <div style={{ flex: 1 }} />
+        <button onClick={handleChangeProject}
+          style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
+          Đổi DA
+        </button>
         <button onClick={() => setFormState({ open: true, editId: null })}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "#3b82f6", border: "none", color: "#fff", padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
           <Ic n="plus" s={16} c="#fff" /> Thêm mới
@@ -1241,7 +1448,7 @@ export default function App() {
             onBatchStatus={handleBatchStatus} onBatchDelete={handleBatchDelete}
             searchRef={searchRef} />}
           {tab === "overdue" && <OverdueScreen docs={docs} onDetail={id => { setDetailId(id); setTab("docs"); }} />}
-          {tab === "settings" && <SettingsScreen onImport={handleImport} onExport={() => exportToXLSX(docs)} />}
+          {tab === "settings" && <SettingsScreen settings={settings} onSave={handleSaveSettings} onImport={handleImport} onExport={() => exportToXLSX(docs)} />}
         </div>
       </div>
 
@@ -1261,7 +1468,7 @@ export default function App() {
       {toast && <Toast msg={toast} onClose={() => setToast(null)} />}
 
       {/* Print View */}
-      <PrintView docs={docs} />
+      <PrintView docs={docs} settings={settings} />
     </div>
   );
 }
