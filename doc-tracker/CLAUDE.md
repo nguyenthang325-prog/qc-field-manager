@@ -146,8 +146,9 @@ SLA mặc định: `thiet_ke=14`, `nghiem_thu=7`, `phap_ly=30`, `hanh_chinh=5`
 
 ## Bước tiếp theo (nếu cần)
 
-### Cần làm khi triển khai schema mới
-- [ ] **Chạy [supabase/schema.sql](supabase/schema.sql)** trong Supabase SQL Editor (project `kozzfemrizemujgvyynn`) để tạo cột `pin_hash`, extension `pgcrypto`, RPC `dt_verify_pin`, và revoke. Chưa chạy thì cổng PIN sẽ báo "Lỗi kết nối".
+### Schema PIN — ĐÃ áp lên production (2026-06-11)
+- [x] Cột `pin_hash`, extension `pgcrypto`, RPC `dt_verify_pin`, revoke đã chạy thành công trên project `kozzfemrizemujgvyynn`.
+- Lưu ý: `pgcrypto` ở schema `extensions` của Supabase → `dt_verify_pin` phải đặt `search_path = public, extensions` (nếu không sẽ lỗi `digest does not exist`).
 
 ### Cải tiến có thể làm sau
 - [ ] Nâng cấp bảo mật thật: Supabase Auth + RLS theo `auth.uid()` (thay cổng PIN tầng app)
