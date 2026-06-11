@@ -1,0 +1,15 @@
+# LƯU Ý: repo Git này có gốc nằm ở thư mục home (C:/Users/Admin).
+# Để tránh liệt kê/commit nhầm toàn bộ home (NTUSER.DAT, AppData, Downloads,
+# .claude.json chứa bí mật, OneDrive, v.v.), ta ẩn TẤT CẢ ở cấp gốc rồi chỉ
+# chừa ra các thư mục dự án thực sự được track trong repo này.
+
+# Local Netlify folder
+.netlify
+
+# Ẩn mọi thứ ở cấp gốc home
+/*
+
+# Chừa lại các file/thư mục cần track
+!/.gitignore
+!/doc-tracker/
+!/qc-field-manager/
