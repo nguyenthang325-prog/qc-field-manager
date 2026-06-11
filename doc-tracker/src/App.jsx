@@ -132,7 +132,7 @@ function daysUntil(iso) {
   return Math.ceil(diff / 86400000);
 }
 function normalizeStr(s) {
-  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
 }
 function getDocUrgency(doc) {
   const today = isoToday();
