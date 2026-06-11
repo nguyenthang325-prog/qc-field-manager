@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { sb } from './supabase.js';
 
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function mapToDB(doc, code) {
   return {
     id: doc.id,
@@ -1135,6 +1140,7 @@ function AuthScreen({ onEnter }) {
   const [code, setCode] = useState('');
   const [mode, setMode] = useState('enter');
   const [name, setName] = useState('');
+  const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -1142,9 +1148,10 @@ function AuthScreen({ onEnter }) {
     const c = code.trim().toUpperCase();
     if (!c) return;
     setLoading(true); setError('');
-    const { data } = await sb.from('dt_projects').select('code').eq('code', c).single();
+    const { data, error: rpcErr } = await sb.rpc('dt_verify_pin', { p_code: c, p_pin: pin });
     setLoading(false);
-    if (!data) { setError('Không tìm thấy dự án. Kiểm tra mã hoặc tạo mới.'); return; }
+    if (rpcErr) { setError('Lỗi kết nối. Vui lòng thử lại.'); return; }
+    if (!data) { setError('Mã dự án hoặc PIN không đúng.'); return; }
     onEnter(c);
   }
 
@@ -1153,7 +1160,8 @@ function AuthScreen({ onEnter }) {
     const n = name.trim();
     if (!c || !n) { setError('Vui lòng nhập đủ mã và tên dự án.'); return; }
     setLoading(true); setError('');
-    const { error: err } = await sb.from('dt_projects').insert({ code: c, name: n, settings: {} });
+    const pin_hash = pin ? await sha256Hex(pin) : null;
+    const { error: err } = await sb.from('dt_projects').insert({ code: c, name: n, settings: {}, pin_hash });
     if (err) { setLoading(false); setError('Mã đã tồn tại hoặc lỗi hệ thống.'); return; }
     const existing = (() => { try { return JSON.parse(localStorage.getItem('dt_docs') || '[]'); } catch { return []; } })();
     if (existing.length > 0) {
@@ -1181,7 +1189,10 @@ function AuthScreen({ onEnter }) {
             <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Nhập mã dự án để truy cập danh sách tài liệu.</p>
             {lbl('Mã dự án')}
             <input autoFocus value={code} onChange={e => { setCode(e.target.value.toUpperCase()); setError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handleEnter()} placeholder="VD: DA-AB12XY" style={inputStyle} />
+              placeholder="VD: DA-AB12XY" style={inputStyle} />
+            {lbl('Mã PIN')}
+            <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleEnter()} placeholder="Để trống nếu dự án không đặt PIN" style={inputStyle} />
             {error && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>{error}</div>}
             <button onClick={handleEnter} disabled={loading} style={{ ...btnPrimary, opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Đang tải...' : 'Vào dự án'}
@@ -1196,8 +1207,11 @@ function AuthScreen({ onEnter }) {
               placeholder="VD: DA-AB12XY" style={inputStyle} />
             {lbl('Tên dự án')}
             <input value={name} onChange={e => { setName(e.target.value); setError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handleCreate()}
               placeholder="Tên dự án xây dựng..." style={inputStyle} />
+            {lbl('Mã PIN (tùy chọn)')}
+            <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+              placeholder="Đặt PIN để bảo vệ truy cập" style={inputStyle} />
             {error && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>{error}</div>}
             <button onClick={handleCreate} disabled={loading} style={{ ...btnPrimary, opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Đang tạo...' : 'Tạo dự án'}
