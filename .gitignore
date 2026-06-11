@@ -13,3 +13,7 @@
 !/.gitignore
 !/doc-tracker/
 !/qc-field-manager/
+
+# Nhưng KHÔNG track thư mục liên kết Vercel cục bộ trong các dự án
+/doc-tracker/.vercel/
+/qc-field-manager/.vercel/
