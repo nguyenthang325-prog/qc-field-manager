@@ -137,16 +137,6 @@ function getDocUrgency(doc) {
 function nowIso() { return new Date().toISOString(); }
 function makeId() { return "doc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6); }
 
-// ── LOCALSTORAGE ─────────────────────────────────────────────────────────────
-function getDocs() {
-  try { return JSON.parse(localStorage.getItem("dt_docs") || "[]"); } catch { return []; }
-}
-function saveDocs(arr) { localStorage.setItem("dt_docs", JSON.stringify(arr)); }
-function getSettings() {
-  try { return JSON.parse(localStorage.getItem("dt_settings") || "{}"); } catch { return {}; }
-}
-function saveSettings(obj) { localStorage.setItem("dt_settings", JSON.stringify(obj)); }
-
 // ── TOAST ────────────────────────────────────────────────────────────────────
 function Toast({ msg, onClose }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
@@ -1236,6 +1226,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const searchRef = useRef();
 
+  const showToast = useCallback(msg => { setToast(msg); }, []);
+
   useEffect(() => {
     if (!projectCode) return;
     setLoading(true);
@@ -1253,8 +1245,7 @@ export default function App() {
       if (projData?.settings) setSettings(projData.settings);
       setLoading(false);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectCode]);
+  }, [projectCode, showToast]);
 
   const setDocs = useCallback((v, undoLabel) => {
     setDocsRaw(prev => {
@@ -1264,34 +1255,40 @@ export default function App() {
     });
   }, []);
 
-  const showToast = msg => { setToast(msg); };
+  const handleUndo = useCallback(() => {
+    if (!undoStack.length) return;
+    const last = undoStack[undoStack.length - 1];
+    const snapIds = new Set(last.snapshot.map(d => d.id));
+    const removedIds = docs.filter(d => !snapIds.has(d.id)).map(d => d.id);
+    setDocsRaw(last.snapshot);
+    setUndoStack(s => s.slice(0, -1));
+    showToast(`Đã hoàn tác: ${last.label}`);
+    // Đồng bộ snapshot lên Supabase: upsert toàn bộ + xóa các bản ghi không còn trong snapshot
+    (async () => {
+      const { error } = await sb.from('dt_docs').upsert(last.snapshot.map(d => mapToDB(d, projectCode)));
+      if (error) { showToast('Lỗi đồng bộ hoàn tác: ' + error.message); return; }
+      if (removedIds.length) await sb.from('dt_docs').delete().in('id', removedIds);
+    })();
+  }, [undoStack, docs, projectCode, showToast]);
 
   useEffect(() => {
     const handler = e => {
       const ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.key === "k") { e.preventDefault(); setTab("docs"); setTimeout(() => searchRef.current?.focus(), 100); }
       if (ctrl && e.key === "n") { e.preventDefault(); setFormState({ open: true, editId: null }); }
-      if (ctrl && e.key === "z") {
-        e.preventDefault();
-        setUndoStack(s => {
-          if (!s.length) return s;
-          const last = s[s.length - 1];
-          setDocsRaw(last.snapshot);
-          showToast(`Đã hoàn tác: ${last.label}`);
-          return s.slice(0, -1);
-        });
-      }
+      if (ctrl && e.key === "z") { e.preventDefault(); handleUndo(); }
       if (ctrl && e.key === "p") { e.preventDefault(); window.print(); }
       if (e.key === "Escape") { setDetailId(null); setFormState({ open: false, editId: null }); }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [handleUndo]);
 
   const detailDoc = detailId ? docs.find(d => d.id === detailId) : null;
   const editDoc = formState.editId ? docs.find(d => d.id === formState.editId) : null;
 
   async function handleSaveDoc(form) {
+    const prevDocs = docs;
     const isNew = !form.id || !docs.find(d => d.id === form.id);
     const docToSave = {
       ...form,
@@ -1307,18 +1304,19 @@ export default function App() {
     const { error } = isNew
       ? await sb.from('dt_docs').insert(row)
       : await sb.from('dt_docs').update(row).eq('id', docToSave.id);
-    if (error) showToast('Lỗi lưu: ' + error.message);
+    if (error) { setDocsRaw(prevDocs); setUndoStack(s => s.slice(0, -1)); showToast('Lỗi lưu: ' + error.message); }
   }
 
   async function handleStatusChange(docId, newStatus, note) {
     const doc = docs.find(d => d.id === docId);
     if (!doc) return;
+    const prevDocs = docs;
     const entry = { date: nowIso(), action: "Đổi trạng thái", from: doc.trangThai, to: newStatus, note: note || "" };
     const newHistory = [...(doc.history || []), entry];
     setDocs(prev => prev.map(d => d.id === docId ? { ...d, trangThai: newStatus, history: newHistory } : d), "Đổi trạng thái");
     showToast("Đã cập nhật trạng thái");
     const { error } = await sb.from('dt_docs').update({ trang_thai: newStatus, history: newHistory }).eq('id', docId);
-    if (error) showToast('Lỗi cập nhật: ' + error.message);
+    if (error) { setDocsRaw(prevDocs); setUndoStack(s => s.slice(0, -1)); showToast('Lỗi cập nhật: ' + error.message); }
   }
 
   async function handleDelete(docId) {
@@ -1341,11 +1339,22 @@ export default function App() {
     setFormState({ open: true, editId: null, duplicateData: copy });
   }
 
-  function handleBatchStatus(newStatus) {
+  async function handleBatchStatus(newStatus) {
     const ids = [...selectedIds];
-    ids.forEach(id => handleStatusChange(id, newStatus, "Cập nhật hàng loạt"));
+    if (!ids.length) return;
+    const prevDocs = docs;
+    const idSet = new Set(ids);
+    const updated = docs.map(d => {
+      if (!idSet.has(d.id)) return d;
+      const entry = { date: nowIso(), action: "Đổi trạng thái", from: d.trangThai, to: newStatus, note: "Cập nhật hàng loạt" };
+      return { ...d, trangThai: newStatus, history: [...(d.history || []), entry] };
+    });
+    setDocs(updated, `Cập nhật ${ids.length} hồ sơ`);
     setSelectedIds([]);
     showToast(`Đã cập nhật ${ids.length} hồ sơ`);
+    const rows = updated.filter(d => idSet.has(d.id)).map(d => mapToDB(d, projectCode));
+    const { error } = await sb.from('dt_docs').upsert(rows);
+    if (error) { setDocsRaw(prevDocs); setUndoStack(s => s.slice(0, -1)); showToast('Lỗi cập nhật: ' + error.message); }
   }
 
   async function handleBatchDelete() {
@@ -1363,11 +1372,12 @@ export default function App() {
   }
 
   function handleImport(file) {
+    const prevDocs = docs;
     importFromXLSX(file, docs, async (merged, count) => {
       setDocs(merged, "Import Excel");
       showToast(`Import thành công ${count} hồ sơ`);
       const { error } = await sb.from('dt_docs').upsert(merged.map(d => mapToDB(d, projectCode)));
-      if (error) showToast('Lỗi lưu import: ' + error.message);
+      if (error) { setDocsRaw(prevDocs); setUndoStack(s => s.slice(0, -1)); showToast('Lỗi lưu import: ' + error.message); }
     });
   }
 
