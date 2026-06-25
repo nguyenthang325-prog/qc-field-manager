@@ -227,7 +227,7 @@ eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
 
 ---
 
-## Trạng thái hiện tại (2026-06-16)
+## Trạng thái hiện tại (2026-06-25 — không thay đổi từ 2026-06-16)
 
 | Hạng mục | Trạng thái |
 |---|---|
@@ -276,4 +276,4 @@ eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
 | `settings` đọc qua `initSettings()` tại thời điểm export, không truyền props | Cùng pattern với các hàm đọc localStorage khác trong file; không cần đổi chữ ký props của `GenCL` |
 | `DefectModal` tách riêng, không tái dùng `EmgModal` | `EmgModal` có drill-down 2 cấp + urgency badge cho tình huống khẩn cấp nhiều bước; `defectData` chỉ là cảnh báo ngắn 1 cấp — ép chung 1 component sẽ phải thêm mode switch không cần thiết |
 | `prepChecked` (checklist trước khi gọi TVGS) không lưu localStorage/session | Chỉ là tự-kiểm cuối cùng trước khi xuất hồ sơ, không phải dữ liệu nghiệm thu; lưu sẽ cần đổi schema session + migrate session cũ mà không ai đọc lại giá trị này sau đó |
-| Vercel Root Directory = `qc-field-manager` | Repo là monorepo (nhiều project con); không đặt đúng Root Directory thì Vercel build sai chỗ dù `vercel.json` đúng — xem mục Deployment |
+| Vercel Root Directory = `.` (rỗng) từ 25/06/2026 | Repo đã migrate sang standalone (không còn monorepo). Root Directory = rỗng = toàn bộ repo là app. Trước 25/06 là `qc-field-manager` khi còn monorepo — không dùng giá trị cũ đó nữa |
