@@ -106,7 +106,11 @@ All icons are rendered by the `Ic` component (inline SVGs), selected by the `n` 
 ```
 `--include=dev` là bắt buộc vì Vercel chạy `NODE_ENV=production` mặc định, sẽ bỏ qua `devDependencies` (trong đó có `vite`). Nếu thiếu flag này → `vite: command not found` → build fail.
 
-**⚠️ Repo là monorepo — Vercel Root Directory phải là `qc-field-manager`:** GitHub repo `nguyenthang325-prog/qc-field-manager` chứa nhiều project con (`doc-tracker/`, `qc-field-manager/`...) trong cùng 1 repo Git (root thật của Git là `C:\Users\Admin` trên máy dev). Vercel Project Settings → **Root Directory phải đặt = `qc-field-manager`**, nếu không Vercel build tại gốc repo (không có `vite`/`package.json` đúng) → `vite: command not found` dù `vercel.json` đã đúng. Sự cố này đã xảy ra (2026-06-16): deploy lỗi dù code/vercel.json hoàn toàn đúng, fix bằng cách PATCH `rootDirectory` qua Vercel API. Nếu sau này deploy lỗi `vite: command not found` mà `vercel.json` vẫn đúng → kiểm tra Root Directory trước tiên.
+**Repo standalone (25/06/2026):** GitHub repo `nguyenthang325-prog/qc-field-manager` đã chuyển từ monorepo thành **standalone repo** — files nằm ở root. Vercel Root Directory = `.` (rỗng). Repo nằm tại `d:\HOC TAP\APP\qc-field-manager\`.
+
+**Auto-deploy:** `git push origin main` → Vercel tự build và deploy lên `https://qc-field-manager.vercel.app`.
+
+> **Lịch sử:** Trước 25/06/2026, repo là monorepo tại `C:\Users\Admin` với Root Directory = `qc-field-manager`. Đã migrate về standalone. Nếu gặp lỗi `vite: command not found` → kiểm tra `vercel.json` có `"installCommand":"npm install --include=dev"` không.
 
 ---
 
@@ -231,12 +235,13 @@ eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
 | Build | ✅ Pass, ~190ms |
 | Lint | ✅ 0 lỗi |
 | Service worker cache | ✅ `qcf-v6` |
-| Vercel Root Directory | ✅ `qc-field-manager` (xem mục Deployment — repo là monorepo) |
+| Vercel Root Directory | ✅ `.` (rỗng — standalone repo từ 25/06/2026) |
+| Git repo | ✅ `nguyenthang325-prog/qc-field-manager` standalone tại `d:\HOC TAP\APP\qc-field-manager\` |
 | Sprint 3 — Bước 1 Nền tảng | ✅ Live |
 | Sprint 3 — Bước 2 Sinh hồ sơ nghiệm thu | ✅ Live |
 | Sprint 3 — Bước 3 Trợ lý cho QC mới | ✅ Live |
 | Sprint 3 — Bước 4 Đa thiết bị | ⬜ Chưa làm (tùy chọn) |
-| Auto-deploy từ GitHub | ✅ Kết nối — push main → deploy tự động |
+| Auto-deploy từ GitHub | ✅ `git push origin main` → deploy tự động |
 | `vercel.json` | ✅ Đúng với `--include=dev` |
 
 ---
