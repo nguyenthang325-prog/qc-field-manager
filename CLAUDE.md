@@ -82,7 +82,7 @@ PDF generation uses `window.open()` with raw HTML string + `window.print()` — 
 - Service worker: [public/sw.js](public/sw.js) — stale-while-revalidate, cache key `qcf-v6`
 - Manifest: [public/manifest.json](public/manifest.json)
 - Registered in [src/main.jsx](src/main.jsx)
-- **Quan trọng**: mỗi khi deploy bundle mới, phải bump cache key trong `sw.js` (qcf-v3 → qcf-v4...) để người dùng nhận bản mới thay vì bị kẹt ở cache cũ
+- **Tự động từ 05/07/2026**: plugin `sw-cache-bump` trong [vite.config.js](vite.config.js) tự append `-b<timestamp>` vào cache key trong `dist/sw.js` mỗi lần build — KHÔNG còn phải bump tay `public/sw.js` khi deploy (tên nguồn giữ `qcf-v6`)
 
 ### Styling
 
