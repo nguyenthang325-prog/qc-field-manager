@@ -151,6 +151,9 @@ const ITEMS_MAP = {
 };
 const getItemsByType = type => ITEMS_MAP[type] || [];
 
+// Nấc 2 — chuẩn hóa vị trí: nhận diện "Tầng" trong location để đối chiếu mô hình BIM về sau
+const detectTang = loc => { const m = (loc || "").toLowerCase().match(/(?:tầng|tang|t)\s*[-\s]?(\d{1,2})/); return m ? "Tầng " + m[1] : null; };
+
 // ── LỖI THƯỜNG GẶP (cảnh báo cho QC mới) ───────────────────────────────────────
 const defectData = {
   ct: [
@@ -563,11 +566,20 @@ function SessionListScreen({ type, title, tc, onOpen }) {
       {creating && (
         <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 16, border: "2px solid " + NAVY }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 12 }}>📋 Thông tin đợt nghiệm thu</div>
-          {[["📍 Vị trí kiểm tra *", "location", "VD: Cột C3-T2, Sàn T3..."], ["👷 KS Giám sát", "ks", "Họ tên KS"]].map(([l, k, ph]) => (
+          {[["📍 Vị trí kiểm tra *", "location", "VD: Dầm sàn Tầng 4 · trục B3"], ["👷 KS Giám sát", "ks", "Họ tên KS"]].map(([l, k, ph]) => (
             <div key={k} style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>{l}</div>
               <input value={form[k]} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} placeholder={ph}
                 style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid " + (k === "location" && !form.location ? "#fca5a5" : "#e2e8f0"), fontSize: 13, outline: "none", boxSizing: "border-box", ...T }} />
+              {k === "location" && (
+                <div style={{ fontSize: 11, marginTop: 5, lineHeight: 1.5 }}>
+                  {form.location.trim()
+                    ? (detectTang(form.location)
+                        ? <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Nhận diện {detectTang(form.location)} — đối chiếu được với mô hình BIM</span>
+                        : <span style={{ color: "#d97706", fontWeight: 600 }}>⚠ Chưa rõ tầng — nên ghi kèm "Tầng N" để sau này khớp với mô hình</span>)
+                    : <span style={{ color: "#94a3b8" }}>Mẹo: ghi <b>Loại cấu kiện + Tầng + trục</b> (vd "Dầm sàn Tầng 4 · trục B3") giúp nghiệm thu khớp được với mô hình BIM.</span>}
+                </div>
+              )}
             </div>
           ))}
           <div style={{ marginBottom: 14 }}>

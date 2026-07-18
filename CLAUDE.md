@@ -246,6 +246,20 @@ eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
 
 ---
 
+### Sprint 4: Cầu QC ↔ BIM — Nấc 2 Chuẩn hóa vị trí (2026-07-18) — ✅ Live
+
+Bối cảnh: bắt đầu bắc cầu dữ liệu nghiệm thu ↔ mô hình IFC (công cụ `qc_to_bim_map.py` ở `d:\HOC TAP\CONG_CU\QUAN_LY_THI_CONG\3_QC_Hien_Truong\`). Điểm chặn: `session.location` là text tự do, không map được sang mô hình. Nấc 2 chuẩn hóa **tại nguồn nhập**, không đổi schema.
+
+- **`detectTang(loc)`** (ngay sau `getItemsByType`) — regex nhận diện "Tầng N" / "TN" trong location.
+- **Gợi ý sống trong form tạo session** (`SessionListScreen`): dưới ô "Vị trí kiểm tra", hiện phản hồi thời gian thực — placeholder mẹo khi trống, 🟢 "✓ Nhận diện Tầng N — đối chiếu được với mô hình BIM" khi bắt được tầng, 🟠 "⚠ Chưa rõ tầng" khi không. Placeholder mới: "Dầm sàn Tầng 4 · trục B3".
+- **KHÔNG chặn nhập, tương thích ngược**: chỉ nudge, không validation gate, không đổi `newSession`/schema → dữ liệu cũ nguyên vẹn.
+
+**Build:** ✅ 235ms, 0 lỗi. **Lint:** ✅ 0 lỗi. **SW cache:** nguồn giữ `qcf-v6` (plugin tự bump `-b<timestamp>` khi build).
+
+> Lộ trình cầu QC↔BIM 6 nấc: Nấc 1 (thống kê nghiệm thu từ backup) ✅, Nấc 2 (chuẩn hóa location) ✅. Tiếp: gom dữ liệu thật → Nấc 3 (cầu thô Tầng×Loại) khi gate ≥80%.
+
+---
+
 ## Bước tiếp theo gợi ý
 
 ### Ưu tiên cao
