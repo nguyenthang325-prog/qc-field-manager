@@ -260,18 +260,35 @@ Bối cảnh: bắt đầu bắc cầu dữ liệu nghiệm thu ↔ mô hình IF
 
 ---
 
+### Sprint 5: Rà soát pháp lý — NĐ06/2021 → NĐ207/2026 (2026-07-30) — ✅ Live
+
+Bối cảnh: rà soát pháp lý toàn kho tri thức phát hiện **Nghị định 207/2026/NĐ-CP** (15/6/2026, hiệu lực 01/7/2026) đã thay thế **NĐ06/2021/NĐ-CP** mà app trích dẫn trực tiếp trong tab tra cứu pháp quy và 2 mẫu văn bản in cho dự án thật (`exportBienBanNghiemThu`, `exportPhieuYCNT`).
+
+- **Banner cảnh báo** trong tab pháp quy (`mode === "pl"`, ngay trên ô tìm kiếm) — nền vàng, ghi rõ NĐ06/2021 đã bị thay thế, số điều `plData` bên dưới **chưa xác minh lại**, chỉ tra cứu tham khảo
+- **Tab label** đổi từ `"⚖️ NĐ 06/2021"` → `"⚖️ NĐ 06/2021 ⚠️"` để cảnh báo ngay ở navigation, không cần mở tab mới thấy
+- **`exportBienBanNghiemThu`**: đổi trích dẫn "Nghị định 06/2021/NĐ-CP, Điều 13/14" → "Nghị định 207/2026/NĐ-CP ... (thay thế NĐ06/2021/NĐ-CP; số điều cụ thể cần đối chiếu văn bản gốc)"; ghi chú cuối trang cũng cập nhật
+- **`exportPhieuYCNT`**: ghi chú cuối trang đổi tương tự
+- **`plData` (7 điều Đ.4/11/13/14/19/21/22) CHƯA sửa số điều** — không tìm được bảng đối chiếu điều khoản NĐ207/2026 ↔ NĐ06/2021 miễn phí (LuatVietnam thu phí, toàn văn Công báo không truy cập được qua WebFetch). Bịa số điều mới rủi ro hơn giữ số cũ kèm banner cảnh báo rõ ràng
+
+**Quyết định kỹ thuật:** không tự suy đoán số điều mới khi chưa có nguồn xác thực — cùng nguyên tắc với việc **không** sửa checklist TCVN 4453 khi phát hiện "TCVN 4453:2025" trên thực tế chỉ là bản dự thảo (ký hiệu "202x") chưa được Bộ KHCN công bố chính thức, chưa có Quyết định công bố. Xem chi tiết đầy đủ đợt rà soát tại `d:\HOC TAP\CLAUDE.md` mục "Tiêu chuẩn áp dụng".
+
+**Build:** ✅ `vite build` 256ms, 0 lỗi. **Lint:** ✅ 0 lỗi. **SW cache:** tự bump qua plugin (nguồn giữ `qcf-v6`).
+
+---
+
 ## Bước tiếp theo gợi ý
 
 ### Ưu tiên cao
 1. **Bước 4 — Đa thiết bị (nếu cần)**: hiện dữ liệu chỉ ở localStorage 1 browser/máy; backup/restore JSON (Bước 1) đã giải quyết tạm việc chuyển dữ liệu thủ công. Nếu cần đồng bộ thật giữa nhiều thiết bị/nhiều người dùng cùng lúc thì mới cần backend nhẹ — cân nhắc kỹ trước khi làm vì đổi từ "không backend" sang "có backend" là thay đổi kiến trúc lớn.
-2. **Thay mẫu PDF tham khảo bằng mẫu thật của dự án** — `exportPhieuYCNT`/`exportBienBanNghiemThu` đang dùng mẫu tham khảo theo NĐ 06/2021; khi TVGS/CĐT cung cấp mẫu thật, sửa nội dung HTML trong 2 hàm này (hoặc dùng cơ chế upload `.xlsx` ở tab "Mẫu biểu" nếu mẫu thật là file Excel).
+2. **Thay mẫu PDF tham khảo bằng mẫu thật của dự án** — `exportPhieuYCNT`/`exportBienBanNghiemThu` đang dùng mẫu tham khảo theo NĐ207/2026/NĐ-CP (đổi từ NĐ 06/2021 ở Sprint 5); khi TVGS/CĐT cung cấp mẫu thật, sửa nội dung HTML trong 2 hàm này (hoặc dùng cơ chế upload `.xlsx` ở tab "Mẫu biểu" nếu mẫu thật là file Excel).
+3. **Đối chiếu số điều chính xác NĐ207/2026 ↔ NĐ06/2021 khi có nguồn miễn phí** — `plData` (7 mục) hiện vẫn hiển thị số điều NĐ06 cũ kèm banner cảnh báo (Sprint 5); cập nhật số điều mới khi có bảng so sánh đầy đủ (LuatVietnam bán, hoặc toàn văn Công báo Chính phủ).
 
 ### Ưu tiên trung bình
-3. **Mở rộng `defectData`** — hiện 3 cảnh báo/loại; có thể bổ sung thêm khi gặp lỗi thực tế mới trong quá trình dùng.
-4. **Thông báo deadline tồn tại** — Web Notifications API cảnh báo tồn tại sắp hết hạn (cần user grant permission).
+4. **Mở rộng `defectData`** — hiện 3 cảnh báo/loại; có thể bổ sung thêm khi gặp lỗi thực tế mới trong quá trình dùng.
+5. **Thông báo deadline tồn tại** — Web Notifications API cảnh báo tồn tại sắp hết hạn (cần user grant permission).
 
 ### Ưu tiên thấp / Tương lai
-5. **Đa dự án** — hiện app chỉ hỗ trợ 1 dự án cụ thể (đúng mục tiêu Sprint 3); nếu sau này dùng cho nhiều dự án khác nhau thì mới cần project switcher.
+6. **Đa dự án** — hiện app chỉ hỗ trợ 1 dự án cụ thể (đúng mục tiêu Sprint 3); nếu sau này dùng cho nhiều dự án khác nhau thì mới cần project switcher.
 
 ---
 

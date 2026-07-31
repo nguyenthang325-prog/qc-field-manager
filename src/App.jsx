@@ -283,7 +283,7 @@ function exportPDF(title, items, results, bienphap, meta, tieuchuan, allPhotos =
     <div style="text-align:center;"><div style="border-top:1px solid #000;padding-top:8px;margin-top:40px;">KS Giám sát thi công</div></div>
     <div style="text-align:center;"><div style="border-top:1px solid #000;padding-top:8px;margin-top:40px;">Đại diện Nhà thầu</div></div>
   </div>
-  <div class="note">ⓘ Đây là báo cáo nháp. Biên bản chính thức phải được ký đầy đủ theo quy định NĐ 06/2021/NĐ-CP.</div>
+  <div class="note">ⓘ Đây là báo cáo nháp. Biên bản chính thức phải được ký đầy đủ theo quy định NĐ207/2026/NĐ-CP (thay thế NĐ 06/2021/NĐ-CP từ 01/7/2026).</div>
   <script>window.onload=function(){window.print();}</script>
   </body></html>`;
   const w = window.open("", "_blank");
@@ -314,7 +314,7 @@ function exportPhieuYCNT(session, settings) {
   <div class="sign">
     <div class="signbox"><strong>ĐẠI DIỆN NHÀ THẦU THI CÔNG</strong><div style="margin-top:60px;border-top:1px solid #000;padding-top:6px;">${settings.ksphutrach || ""}</div></div>
   </div>
-  <div class="note">ⓘ Mẫu phiếu yêu cầu nghiệm thu tham khảo theo tinh thần NĐ 06/2021/NĐ-CP. Khi dự án có mẫu riêng của TVGS/CĐT, dùng mẫu đó để thay thế.</div>
+  <div class="note">ⓘ Mẫu phiếu yêu cầu nghiệm thu tham khảo theo tinh thần NĐ207/2026/NĐ-CP (thay thế NĐ 06/2021/NĐ-CP từ 01/7/2026). Khi dự án có mẫu riêng của TVGS/CĐT, dùng mẫu đó để thay thế.</div>
   <script>window.onload=function(){window.print();}</script>
   </body></html>`;
   const w = window.open("", "_blank");
@@ -357,8 +357,8 @@ function exportBienBanNghiemThu(session, items, results, bienphap, meta, setting
   <div class="sec">2. Căn cứ nghiệm thu</div>
   <ul class="cc">
     <li>Tiêu chuẩn áp dụng: ${session.tc || "—"}</li>
-    <li>Nghị định 06/2021/NĐ-CP, Điều 13 — Nghiệm thu công việc xây dựng</li>
-    <li>Nghị định 06/2021/NĐ-CP, Điều 14 — Nghiệm thu công việc xây dựng bị che khuất (nếu thuộc bộ phận che khuất)</li>
+    <li>Nghị định 207/2026/NĐ-CP — Quy định về nghiệm thu công việc xây dựng (thay thế NĐ06/2021/NĐ-CP từ 01/7/2026; số điều cụ thể cần đối chiếu văn bản gốc)</li>
+    <li>Nghị định 207/2026/NĐ-CP — Quy định về nghiệm thu công việc xây dựng bị che khuất, nếu thuộc bộ phận che khuất (thay thế NĐ06/2021/NĐ-CP; số điều cụ thể cần đối chiếu văn bản gốc)</li>
   </ul>
   <div class="sec">3. Nội dung nghiệm thu</div>
   <table><thead><tr><th style="width:36px;">#</th><th>Hạng mục kiểm tra</th><th style="width:110px;">Kết quả</th><th>Biện pháp khắc phục</th></tr></thead><tbody>${rows}</tbody></table>
@@ -369,7 +369,7 @@ function exportBienBanNghiemThu(session, items, results, bienphap, meta, setting
     <div class="signbox"><strong>ĐẠI DIỆN TƯ VẤN GIÁM SÁT</strong><div style="margin-top:55px;border-top:1px solid #000;padding-top:6px;">${settings.tvgs || ""}</div></div>
     <div class="signbox"><strong>ĐẠI DIỆN NHÀ THẦU THI CÔNG</strong><div style="margin-top:55px;border-top:1px solid #000;padding-top:6px;">${settings.ksphutrach || ""}</div></div>
   </div>
-  <div class="note">ⓘ Biên bản nghiệm thu công việc xây dựng tại hiện trường chỉ TVGS và Nhà thầu ký theo NĐ 06/2021/NĐ-CP, Đ.13. Mẫu tham khảo — khi dự án có mẫu riêng của TVGS/CĐT, dùng mẫu đó để thay thế.</div>
+  <div class="note">ⓘ Biên bản nghiệm thu công việc xây dựng tại hiện trường chỉ TVGS và Nhà thầu ký, theo NĐ207/2026/NĐ-CP (thay thế NĐ 06/2021/NĐ-CP từ 01/7/2026). Mẫu tham khảo — khi dự án có mẫu riêng của TVGS/CĐT, dùng mẫu đó để thay thế.</div>
   <script>window.onload=function(){window.print();}</script>
   </body></html>`;
   const w = window.open("", "_blank");
@@ -1106,7 +1106,7 @@ function TCVNScreen() {
 
   return <div style={{ padding: "0 16px 16px" }}>
     <div style={{ display: "flex", background: "#f1f5f9", borderRadius: 12, padding: 4, marginBottom: 16, gap: 4 }}>
-      {[["tcvn", "📐 Tiêu chuẩn TCVN"], ["pl", "⚖️ NĐ 06/2021"]].map(([m, l]) => <button key={m} onClick={() => sMode(m)} style={{ flex: 1, padding: "10px 6px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: mode === m ? "#fff" : "transparent", color: mode === m ? NAVY : "#64748b", boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.1)" : "none", ...T }}>{l}</button>)}
+      {[["tcvn", "📐 Tiêu chuẩn TCVN"], ["pl", "⚖️ NĐ 06/2021 ⚠️"]].map(([m, l]) => <button key={m} onClick={() => sMode(m)} style={{ flex: 1, padding: "10px 6px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: mode === m ? "#fff" : "transparent", color: mode === m ? NAVY : "#64748b", boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.1)" : "none", ...T }}>{l}</button>)}
     </div>
     {mode === "tcvn" && <>
       <div style={{ position: "relative", marginBottom: 12 }}><div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)" }}><Ic n="search" s={18} c="#94a3b8" /></div><input value={q} onChange={e => sQ(e.target.value)} placeholder="Tìm mã, tên, nội dung..." style={{ width: "100%", padding: "13px 40px 13px 42px", borderRadius: 14, border: "2px solid " + (q ? NAVY : "#e2e8f0"), fontSize: 14, outline: "none", boxSizing: "border-box", ...T }} />{q && <button onClick={() => sQ("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "#f1f5f9", border: "none", borderRadius: 99, width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Ic n="x" s={13} c="#64748b" /></button>}</div>
@@ -1126,6 +1126,7 @@ function TCVNScreen() {
       {f.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}><div style={{ fontSize: 36 }}>🔍</div><div style={{ marginTop: 8 }}>Không tìm thấy</div></div>}
     </>}
     {mode === "pl" && <>
+      <div style={{ background: "#fef3c7", border: "1.5px solid #f59e0b", borderRadius: 12, padding: "10px 12px", marginBottom: 12, fontSize: 12, color: "#78350f", lineHeight: 1.5 }}>⚠️ NĐ 06/2021/NĐ-CP đã bị <b>Nghị định 207/2026/NĐ-CP</b> thay thế (hiệu lực 01/7/2026). Số điều bên dưới là theo NĐ cũ — <b>chưa xác minh số điều tương ứng</b> trong NĐ207/2026, chỉ dùng tra cứu tham khảo, kiểm tra văn bản gốc trước khi áp dụng chính thức.</div>
       <div style={{ position: "relative", marginBottom: 12 }}><div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)" }}><Ic n="search" s={18} c="#94a3b8" /></div><input value={qPL} onChange={e => sQPL(e.target.value)} placeholder="Tìm điều luật, từ khóa..." style={{ width: "100%", padding: "13px 40px 13px 42px", borderRadius: 14, border: "2px solid " + (qPL ? NAVY : "#e2e8f0"), fontSize: 14, outline: "none", boxSizing: "border-box", ...T }} />{qPL && <button onClick={() => sQPL("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "#f1f5f9", border: "none", borderRadius: 99, width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Ic n="x" s={13} c="#64748b" /></button>}</div>
       {!qPL && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{["nghiệm thu", "hoàn công", "bảo hành", "giám sát", "sự cố"].map(t => <button key={t} onClick={() => sQPL(t)} style={{ padding: "7px 14px", borderRadius: 99, background: "#eff6ff", border: "1.5px solid #bfdbfe", fontSize: 12, color: NAVY, fontWeight: 600, cursor: "pointer", ...T }}>{t}</button>)}</div>}
       {fPL.map(d => { const o = exPL === d.d; return <div key={d.d} style={{ background: "#fff", borderRadius: 16, marginBottom: 10, border: "2px solid " + (o ? NAVY : "#e2e8f0"), overflow: "hidden" }}>
