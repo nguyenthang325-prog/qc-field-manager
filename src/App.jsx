@@ -297,6 +297,7 @@ function exportPhieuYCNT(session, settings) {
   <body>
   <h1>PHIẾU YÊU CẦU NGHIỆM THU</h1>
   <h2>${settings.congtrinh || "—"}${settings.hangmuc ? " — " + settings.hangmuc : ""}</h2>
+  ${session.maBB ? `<div style="text-align:center;font-size:12.5px;color:#0f766e;font-weight:700;margin-bottom:10px;">Mã số: ${session.maBB}</div>` : ""}
   <div class="info">
     <div><strong>Kính gửi:</strong> ${settings.tvgs ? "Tư vấn giám sát " + settings.tvgs : "Tư vấn giám sát"}${settings.chudt ? "; Chủ đầu tư " + settings.chudt : ""}</div>
     <div><strong>Công trình:</strong> ${settings.congtrinh || "—"}${settings.mahieu ? " (Mã hiệu: " + settings.mahieu + ")" : ""}</div>
@@ -346,6 +347,7 @@ function exportBienBanNghiemThu(session, items, results, bienphap, meta, setting
   <body>
   <h1>BIÊN BẢN NGHIỆM THU CÔNG VIỆC XÂY DỰNG</h1>
   <h2>${settings.congtrinh || "—"}${settings.hangmuc ? " — " + settings.hangmuc : ""}${settings.mahieu ? " (Mã hiệu: " + settings.mahieu + ")" : ""}</h2>
+  ${session.maBB ? `<div style="text-align:center;font-size:12.5px;color:#7c2d12;font-weight:700;margin-bottom:10px;">Mã số: ${session.maBB}</div>` : ""}
   <div class="info">
     <div><strong>Địa điểm:</strong> ${settings.diachi || "—"}</div>
     <div><strong>Ngày nghiệm thu:</strong> ${meta.d || "—"}</div>
@@ -449,6 +451,40 @@ const newSession = (type, title, tc) => ({
   location: "", date: new Date().toISOString().slice(0, 10), ks: "",
   results: {}, bienphap: {}, photos: {}, createdAt: new Date().toISOString(),
 });
+
+// ── Mã biên bản (Mã BB) — sinh tự động, không nhập tay ──
+// Định dạng: {viết tắt Hạng mục}-{Loại công việc}-{STT 3 số}, vd "PT5-BT-003".
+// STT đếm theo đúng tổ hợp hạng mục+loại công việc, tính trực tiếp từ qcm_sessions
+// hiện có (không lưu bộ đếm riêng) — giữ mã ổn định 1 lần gán, không đổi khi sửa session sau đó.
+const stripDiacritics = s => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d");
+const initialsTag = (str, fallback) => {
+  const words = stripDiacritics(str).trim().split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (!words.length) return fallback;
+  // Giữ nguyên từ cuối nếu có chữ số (vd "Tầng 5", "B2") — thường là số tầng/khối, giữ
+  // nguyên vẹn dễ nhận diện hơn là rút gọn còn 1 ký tự như các từ chữ khác.
+  const last = words[words.length - 1];
+  const keepLast = /\d/.test(last) && last.length <= 4;
+  const head = keepLast ? words.slice(0, -1) : words;
+  const tag = head.map(w => w[0]).join("").toUpperCase() + (keepLast ? last.toUpperCase() : "");
+  return tag.slice(0, 8) || fallback;
+};
+const genMaBB = (session, settings) => {
+  const tag = initialsTag(settings?.hangmuc, "DA");
+  const prefix = `${tag}-${session.type.toUpperCase().replace(/_/g, "")}-`;
+  const seq = getSessions().filter(s => s.maBB && s.maBB.startsWith(prefix)).length + 1;
+  return prefix + String(seq).padStart(3, "0");
+};
+// Gán Mã BB lần đầu xuất hồ sơ (giữ nguyên nếu đã có) + đánh dấu loại hồ sơ đã xuất, phục vụ Dashboard kiểm soát.
+// Đọc bản mới nhất từ localStorage theo id (không tin prop `session` truyền vào) — tránh trường hợp
+// bấm liên tiếp 2 nút xuất (YCNT rồi BBNT) trước khi React kịp render lại prop, làm sinh 2 mã khác nhau
+// cho cùng 1 lần nghiệm thu.
+const markExported = (session, docType) => {
+  const latest = getSessions().find(s => s.id === session.id) || session;
+  const updated = { ...session, maBB: latest.maBB || genMaBB(session, initSettings()) };
+  if (docType === "ycnt") updated.exportedYCNT = true; else updated.exportedBBNT = true;
+  upsertSession(updated);
+  return updated;
+};
 
 // Image compression (max 900px, JPEG 72%)
 const compressImage = file => new Promise(resolve => {
@@ -805,6 +841,7 @@ function GenCL({ items, session, onUpdate }) {
           <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", padding: "20px 18px 32px" }}>
             <div style={{ textAlign: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>BIÊN BẢN NGHIỆM THU</div>
+              {session.maBB && <div style={{ fontSize: 11.5, color: "#0f766e", fontWeight: 700, marginTop: 2 }}>Mã số: {session.maBB}</div>}
               <div style={{ fontSize: 13, color: NAVY, fontWeight: 700 }}>{session.title}</div>
               <div style={{ fontSize: 12, color: "#64748b" }}>{session.tc} · {session.location}</div>
             </div>
@@ -849,8 +886,8 @@ function GenCL({ items, session, onUpdate }) {
               <button onClick={() => exportPDF(session.title, items, results, bienphap, meta, session.tc, photos)} style={{ flex: 1, padding: "14px", background: NAVY, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", ...T }}>🖨️ Checklist nội bộ</button>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-              <button onClick={() => exportPhieuYCNT(session, initSettings())} style={{ flex: 1, padding: "14px", background: "#0f766e", color: "#fff", border: "none", borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: "pointer", ...T }}>📋 Phiếu YCNT</button>
-              <button onClick={() => exportBienBanNghiemThu(session, items, results, bienphap, meta, initSettings())} style={{ flex: 1, padding: "14px", background: "#7c2d12", color: "#fff", border: "none", borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: "pointer", ...T }}>📄 Biên bản NT</button>
+              <button onClick={() => { const s = markExported(session, "ycnt"); onUpdate(s); exportPhieuYCNT(s, initSettings()); }} style={{ flex: 1, padding: "14px", background: "#0f766e", color: "#fff", border: "none", borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: "pointer", ...T }}>📋 Phiếu YCNT</button>
+              <button onClick={() => { const s = markExported(session, "bbnt"); onUpdate(s); exportBienBanNghiemThu(s, items, results, bienphap, meta, initSettings()); }} style={{ flex: 1, padding: "14px", background: "#7c2d12", color: "#fff", border: "none", borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: "pointer", ...T }}>📄 Biên bản NT</button>
             </div>
           </div>
         </div>
@@ -1483,7 +1520,7 @@ function WeeklyReportScreen({ loiList, nkList, samp, sessions = [] }) {
       </div>
     </div>}
     {activeTab === "analytics" && (() => {
-      const typeLabels = { ct: "Cốt thép", vk: "Ván khuôn", bt: "Bê tông", tm: "Chống thấm", ht_xay: "Xây", ht_trat: "Trát", ht_lat: "Lát gạch", ht_op: "Ốp gạch", ht_son: "Sơn", ht_tran: "Trần TC", ht_cua: "Cửa" };
+      const typeLabels = CS_LABEL;
       let totalItems = 0, passItems = 0;
       const typeStats = {};
       sessions.forEach(sess => {
@@ -1640,13 +1677,100 @@ function Dash({ setTab, loiList, nkList, samp }) {
     </div>}
     <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>TRUY CẬP NHANH</div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-      {[{ t: "checklist", ic: "cl", l: "Checklist", d: "Cốt thép, VK, BT" }, { t: "tcvn", ic: "scale", l: "TCVN", d: "12 tiêu chuẩn tra cứu nhanh" }, { t: "maubieu", ic: "save", l: "Mẫu biểu CĐT", d: "Upload & điền form .xlsx" }, { t: "thinghiem", ic: "flask", l: "Thí nghiệm", d: "Máy tính + Nhắc nhở" }, { t: "saiso", ic: "ruler", l: "Sai số", d: "TCVN 4453 & 9377" }].map(c => <button key={c.t} onClick={() => setTab(c.t)} style={{ background: "#fff", border: "2px solid #e2e8f0", borderRadius: 16, padding: "16px 14px", textAlign: "left", cursor: "pointer", position: "relative", boxShadow: "0 2px 8px rgba(30,58,138,0.07)" }}>
+      {[{ t: "kiemsoat", ic: "cl", l: "Kiểm soát hồ sơ", d: "Danh mục Mã BB, đủ/thiếu YCNT-BBNT" }, { t: "checklist", ic: "cl", l: "Checklist", d: "Cốt thép, VK, BT" }, { t: "tcvn", ic: "scale", l: "TCVN", d: "12 tiêu chuẩn tra cứu nhanh" }, { t: "maubieu", ic: "save", l: "Mẫu biểu CĐT", d: "Upload & điền form .xlsx" }, { t: "thinghiem", ic: "flask", l: "Thí nghiệm", d: "Máy tính + Nhắc nhở" }, { t: "saiso", ic: "ruler", l: "Sai số", d: "TCVN 4453 & 9377" }].map(c => <button key={c.t} onClick={() => setTab(c.t)} style={{ background: "#fff", border: "2px solid #e2e8f0", borderRadius: 16, padding: "16px 14px", textAlign: "left", cursor: "pointer", position: "relative", boxShadow: "0 2px 8px rgba(30,58,138,0.07)" }}>
         {c.badge && <span style={{ position: "absolute", top: 10, right: 10, background: "#ef4444", color: "#fff", borderRadius: 99, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{c.badge}</span>}
         <div style={{ width: 42, height: 42, borderRadius: 12, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}><Ic n={c.ic} s={20} c="#fff" /></div>
         <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, lineHeight: 1.3, marginBottom: 2 }}>{c.l}</div>
         <div style={{ fontSize: 11, color: "#64748b" }}>{c.d}</div>
       </button>)}
     </div>
+  </div>;
+}
+
+// ── KIỂM SOÁT HỒ SƠ — bảng danh mục cho vai trò quản lý/kiểm soát (không làm hồ sơ) ──
+// Tính toán trực tiếp từ qcm_sessions hiện có, không lưu dữ liệu riêng — sửa 1 session ở
+// tab Nghiệm thu sẽ tự phản ánh đúng ở đây, không cần đồng bộ 2 nơi.
+const CS_LABEL = {
+  ct: "Cốt thép", vk: "Ván khuôn", bt: "Bê tông", tm: "Chống thấm",
+  ht_xay: "Xây", ht_trat: "Trát", ht_lat: "Lát gạch", ht_op: "Ốp gạch",
+  ht_son: "Sơn", ht_tran: "Trần TC", ht_cua: "Cửa",
+};
+function ControlScreen() {
+  const [filterType, setFilterType] = useState("all");
+  const [filterKL, setFilterKL] = useState("all");
+  const sessions = getSessions();
+
+  const rows = sessions.map(s => {
+    const items = getItemsByType(s.type);
+    const results = s.results || {};
+    const ans = Object.keys(results).length;
+    const kC = Object.values(results).filter(v => v === "k").length;
+    const allDone = items.length > 0 && ans === items.length;
+    const kl = !allDone ? "dangkt" : kC === 0 ? "dat" : "chuadat";
+    return { ...s, klStatus: kl };
+  }).filter(r => (filterType === "all" || r.type === filterType) && (filterKL === "all" || r.klStatus === filterKL));
+
+  const klMeta = {
+    dat: { l: "✅ Đạt", c: "#16a34a" }, chuadat: { l: "❌ Chưa đạt", c: "#dc2626" }, dangkt: { l: "⏳ Đang KT", c: "#94a3b8" },
+  };
+  const thieuHoSo = sessions.filter(s => {
+    const items = getItemsByType(s.type);
+    const ans = Object.keys(s.results || {}).length;
+    return items.length > 0 && ans === items.length && (!s.exportedYCNT || !s.exportedBBNT);
+  }).length;
+
+  return <div style={{ padding: "0 16px 16px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+      <div style={{ background: "#eff6ff", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: NAVY }}>{sessions.length}</div>
+        <div style={{ fontSize: 11, color: NAVY, fontWeight: 600 }}>Tổng hồ sơ nghiệm thu</div>
+      </div>
+      <div style={{ background: thieuHoSo > 0 ? "#fffbeb" : "#f0fdf4", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: thieuHoSo > 0 ? "#d97706" : "#16a34a" }}>{thieuHoSo}</div>
+        <div style={{ fontSize: 11, color: thieuHoSo > 0 ? "#d97706" : "#16a34a", fontWeight: 600 }}>Đã KT xong, còn thiếu YCNT/BBNT</div>
+      </div>
+    </div>
+
+    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ flex: 1, padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 12.5, ...T }}>
+        <option value="all">Tất cả loại</option>
+        {Object.entries(CS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <select value={filterKL} onChange={e => setFilterKL(e.target.value)} style={{ flex: 1, padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 12.5, ...T }}>
+        <option value="all">Mọi kết luận</option>
+        <option value="dat">✅ Đạt</option>
+        <option value="chuadat">❌ Chưa đạt</option>
+        <option value="dangkt">⏳ Đang KT</option>
+      </select>
+    </div>
+
+    {rows.length === 0 ? (
+      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, padding: "30px 0" }}>Chưa có hồ sơ nào khớp bộ lọc.</div>
+    ) : (
+      <div style={{ overflowX: "auto", background: "#fff", borderRadius: 14, border: "1.5px solid #e2e8f0" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["Mã BB", "Loại · Vị trí", "Ngày", "YCNT", "BBNT", "Kết luận"].map(h => (
+                <th key={h} style={{ padding: "9px 8px", textAlign: "left", color: "#64748b", fontWeight: 700, whiteSpace: "nowrap", borderBottom: "1.5px solid #e2e8f0" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "9px 8px", fontWeight: 700, color: r.maBB ? NAVY : "#cbd5e1", whiteSpace: "nowrap" }}>{r.maBB || "Chưa cấp"}</td>
+                <td style={{ padding: "9px 8px" }}>{CS_LABEL[r.type] || r.type}{r.location ? " · " + r.location : ""}</td>
+                <td style={{ padding: "9px 8px", whiteSpace: "nowrap" }}>{r.date}</td>
+                <td style={{ padding: "9px 8px", textAlign: "center" }}>{r.exportedYCNT ? "✅" : "—"}</td>
+                <td style={{ padding: "9px 8px", textAlign: "center" }}>{r.exportedBBNT ? "✅" : "—"}</td>
+                <td style={{ padding: "9px 8px", fontWeight: 700, color: klMeta[r.klStatus].c, whiteSpace: "nowrap" }}>{klMeta[r.klStatus].l}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
   </div>;
 }
 
@@ -1706,7 +1830,8 @@ export default function App() {
   const pT = {
     home: null, checklist: "Checklist Nghiệm thu", baocao: "Báo cáo Tuần",
     maubieu: "Mẫu biểu Chủ đầu tư", tcvn: "Tra cứu TCVN & Pháp lý",
-    nhatky: "Nhật ký Công trường", thinghiem: "Thí nghiệm", saiso: "Bảng tra Sai số"
+    nhatky: "Nhật ký Công trường", thinghiem: "Thí nghiệm", saiso: "Bảng tra Sai số",
+    kiemsoat: "Kiểm soát hồ sơ",
   };
 
   const hT = activeSession ? (activeSession.location || activeSession.title)
@@ -1741,6 +1866,7 @@ export default function App() {
       {tab === "baocao" && <WeeklyReportScreen loiList={loiList} nkList={nkList} samp={samp} sessions={getSessions()} />}
       {tab === "maubieu" && <XLSXScreen />}
       {tab === "tcvn" && <TCVNScreen />}
+      {tab === "kiemsoat" && <ControlScreen />}
       {tab === "nhatky" && <NKScreen loiList={loiList} sLL={sLL} nkList={nkList} sNKL={sNKL} />}
       {tab === "thinghiem" && <TNScreen samp={samp} setSamp={setSamp} />}
       {tab === "saiso" && <SSScreen />}
