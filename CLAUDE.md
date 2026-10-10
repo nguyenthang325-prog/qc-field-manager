@@ -24,7 +24,7 @@ The root `App` component owns three pieces of navigation state:
 - `st` — checklist subtype (e.g. `"ct"`, `"vk"`, `"bt"`, `"ht_xay"`, `"tm"`, etc.)
 - `activeSession` — the currently open checklist session object
 
-The checklist flow is three levels deep: `CLScreen` (category picker) → `SessionListScreen` (session CRUD) → `GenCL` (item-by-item checklist with photo capture and PDF export).
+The checklist flow is three levels deep: `CLScreen` (category picker) → `SessionListScreen` (session CRUD) → `GenCL` (item-by-item checklist and PDF export; no photo capture since Sprint 8).
 
 ### Screens
 
@@ -33,7 +33,7 @@ The checklist flow is three levels deep: `CLScreen` (category picker) → `Sessi
 | `Dash` | `home` | Dashboard: defect counts, overdue banner, latest diary entry |
 | `CLScreen` | `checklist` | Category selector for all checklist types |
 | `SessionListScreen` | `checklist` + `st` | Per-type session history (create / open / delete) |
-| `GenCL` | `checklist` + `st` + `activeSession` | Checklist execution with pass/fail/N/A, photos, remediation notes, PDF export |
+| `GenCL` | `checklist` + `st` + `activeSession` | Checklist execution with pass/fail/N/A, remediation notes, PDF export (old photos view/delete only) |
 | `NKScreen` | `nhatky` | Construction diary (tc tab) + defect tracker (loi tab) |
 | `TNScreen` | `thinghiem` | Sample quantity calculator + test-date reminder tracker |
 | `WeeklyReportScreen` | `baocao` | Weekly PDF report + analytics dashboard + settings (3 tabs) |
@@ -72,9 +72,11 @@ All reference data is hardcoded as constants near the top of [src/App.jsx](src/A
 | `qcm_xlsx_list` | Uploaded XLSX templates (rows + merges stored as JSON) |
 | `qcm_settings` | Project settings for weekly report |
 
-Shared state (`loiList`, `nkList`, `samp`) is lifted to `App` and passed down; wrapper setters auto-persist to localStorage. Photos are compressed to 900px JPEG 72% before storage (`compressImage()`).
+Shared state (`loiList`, `nkList`, `samp`) is lifted to `App` and passed down; wrapper setters auto-persist to localStorage.
 
-**Mọi lệnh ghi localStorage phải đi qua `lsSet(key, str)`** (đầu mục SESSION MANAGEMENT) — không viết `try { localStorage.setItem(...) } catch {}` mới. `lsSet` phát sự kiện `qcm-storage-full` khi ghi thất bại → `App` hiện banner đỏ. Ngoại lệ duy nhất: `importAllData` (lỗi đã báo qua `onDone(err)`). Giới hạn ~5 triệu ký tự/trang (`LS_LIMIT`); ảnh base64 ~110–200 KB/tấm → **~25–40 ảnh là đầy**.
+**App KHÔNG chụp/lưu ảnh mới (từ 10/10/2026, Sprint 8).** Ảnh hiện trường để ở máy ảnh điện thoại / Zalo. Trường ảnh cũ (`session.photos`, `loi.ph`, `loi.closurePhotos`) vẫn giữ trong schema và vẫn hiển thị/in nếu còn — chỉ bỏ đường nhập. **Không thêm lại ô chụp ảnh lưu base64 vào localStorage** — nếu thật sự cần ảnh thì phải chuyển sang IndexedDB.
+
+**Mọi lệnh ghi localStorage phải đi qua `lsSet(key, str)`** (đầu mục SESSION MANAGEMENT) — không viết `try { localStorage.setItem(...) } catch {}` mới. `lsSet` phát sự kiện `qcm-storage-full` khi ghi thất bại → `App` hiện banner đỏ. Ngoại lệ duy nhất: `importAllData` (lỗi đã báo qua `onDone(err)`). Giới hạn ~5 triệu ký tự/trang (`LS_LIMIT`); dữ liệu chữ ~1 KB/mục nên khi không có ảnh gần như không thể đầy.
 
 ### PDF export
 
@@ -304,6 +306,19 @@ Rà soát sau 6 tuần không dùng phát hiện: **9 chỗ ghi localStorage nu�
 
 ---
 
+### Sprint 8: Bỏ lưu ảnh trong app (2026-10-10) — ✅ Code xong, verify trên browser
+
+Quyết định của người dùng (sau Sprint 7): **không lưu ảnh trong app** để không bao giờ đầy bộ nhớ. Ảnh hiện trường để ở máy ảnh / Zalo. Rà code phát hiện thêm: ảnh tồn tại (`hPh`) lưu **nguyên gốc không nén** qua `readAsDataURL` → 1 ảnh camera 3–5 MB có thể đầy ngay tấm đầu.
+
+- **Bỏ đường nhập ảnh ở cả 3 chỗ:** nút 📷 trong `GenCL` (mỗi hạng mục), ô "📸 Ảnh" trong form tồn tại (`NKScreen`), "📸 Ảnh bằng chứng" trong modal khắc phục. Gỡ `compressImage`, `addPhotos`, `uploading`, `hPh`, state `ph`.
+- **Ảnh cũ giữ nguyên:** vẫn hiển thị, vẫn xoá từng ảnh được (`removePhoto`), vẫn in trong PDF Checklist nội bộ. Tồn tại mới ghi `ph: []`; khắc phục mới ghi `closurePhotos: []` (giữ shape cũ).
+- **Nút "🗑️ Xoá toàn bộ ảnh cũ (N ảnh)"** trong Báo cáo → Cài đặt: `countPhotos()` + `purgeAllPhotos()` (cạnh `exportAllData`). Xoá `photos` mọi session + `ph`/`closurePhotos` mọi tồn tại, giữ nguyên chữ; `confirm` nhắc Sao lưu trước, xong `reload()`. Nút khoá khi N = 0. Không có key `qcm_loi` → không ghi (giữ dữ liệu mẫu `loiInit`).
+- Biên bản NT / Phiếu YCNT / Báo cáo tuần **vốn không dùng ảnh** → không ảnh hưởng.
+
+**Verify (Chrome, dữ liệu giả 1 phiên 2 ảnh + 1 tồn tại 1 ảnh + 1 khắc phục 1 ảnh):** checklist 0 ô chụp, 2 ảnh cũ vẫn hiện; tạo tồn tại mới → lưu `ph: []`; modal khắc phục không còn mục ảnh, ghi chú bắt buộc vẫn chạy; nút xoá hiện "(4 ảnh)" → sau xoá: ảnh = 0, `results`/`bienphap`/`location`/`closureNote` nguyên vẹn, nút về "(0 ảnh)" bị khoá. **Build:** ✅ 210ms. **Lint:** ✅ 0 lỗi.
+
+---
+
 ## Bước tiếp theo gợi ý
 
 ### Ưu tiên cao
@@ -335,4 +350,5 @@ Rà soát sau 6 tuần không dùng phát hiện: **9 chỗ ghi localStorage nu�
 | `settings` đọc qua `initSettings()` tại thời điểm export, không truyền props | Cùng pattern với các hàm đọc localStorage khác trong file; không cần đổi chữ ký props của `GenCL` |
 | `DefectModal` tách riêng, không tái dùng `EmgModal` | `EmgModal` có drill-down 2 cấp + urgency badge cho tình huống khẩn cấp nhiều bước; `defectData` chỉ là cảnh báo ngắn 1 cấp — ép chung 1 component sẽ phải thêm mode switch không cần thiết |
 | `prepChecked` (checklist trước khi gọi TVGS) không lưu localStorage/session | Chỉ là tự-kiểm cuối cùng trước khi xuất hồ sơ, không phải dữ liệu nghiệm thu; lưu sẽ cần đổi schema session + migrate session cũ mà không ai đọc lại giá trị này sau đó |
+| Không lưu ảnh trong app (10/10/2026) | localStorage ~5 MB, ảnh base64 làm đầy sau vài chục tấm và mất dữ liệu. Ảnh hiện trường vốn đã nằm ở máy ảnh/Zalo; Biên bản NT/YCNT không dùng ảnh. Chọn bỏ thay vì IndexedDB để giữ app đơn giản |
 | Vercel Root Directory = `.` (rỗng) từ 25/06/2026 | Repo đã migrate sang standalone (không còn monorepo). Root Directory = rỗng = toàn bộ repo là app. Trước 25/06 là `qc-field-manager` khi còn monorepo — không dùng giá trị cũ đó nữa |

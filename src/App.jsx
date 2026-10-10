@@ -434,6 +434,18 @@ const exportAllData = () => {
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 };
+// ── Ảnh cũ: app không chụp ảnh mới nữa (10/2026) — đếm/xoá ảnh còn lại để giải phóng bộ nhớ ──
+const getLoiRaw = () => { try { const s = localStorage.getItem("qcm_loi"); return s ? JSON.parse(s) : null; } catch { return null; } };
+const countPhotos = () => {
+  const n1 = getSessions().reduce((a, s) => a + Object.values(s.photos || {}).reduce((b, arr) => b + (arr?.length || 0), 0), 0);
+  const n2 = (getLoiRaw() || []).reduce((a, l) => a + (l.ph?.length || 0) + (l.closurePhotos?.length || 0), 0);
+  return n1 + n2;
+};
+const purgeAllPhotos = () => {
+  saveSessions(getSessions().map(s => ({ ...s, photos: {} })));
+  const loi = getLoiRaw(); // null = chưa có key → giữ nguyên dữ liệu mẫu, không ghi đè
+  if (loi) lsSet("qcm_loi", JSON.stringify(loi.map(l => ({ ...l, ph: [], closurePhotos: [] }))));
+};
 const importAllData = (file, onDone) => {
   const r = new FileReader();
   r.onload = e => {
@@ -496,19 +508,6 @@ const markExported = (session, docType) => {
 };
 
 // Image compression (max 900px, JPEG 72%)
-const compressImage = file => new Promise(resolve => {
-  const img = new Image(), url = URL.createObjectURL(file);
-  img.onload = () => {
-    const MAX = 900, r = Math.min(MAX / img.width, MAX / img.height, 1);
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
-    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    URL.revokeObjectURL(url);
-    resolve(c.toDataURL("image/jpeg", 0.72));
-  };
-  img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-  img.src = url;
-});
 
 // ── EMERGENCY ────────────────────────────────────────────────────────────────
 function EmgModal({ onClose }) {
@@ -700,7 +699,6 @@ function GenCL({ items, session, onUpdate }) {
   });
   const [showReport, setShowReport] = useState(false);
   const [viewPhoto, setViewPhoto] = useState(null);
-  const [uploading, setUploading] = useState({});
   const [showDefects, setShowDefects] = useState(false);
   const [prepChecked, setPrepChecked] = useState({});
 
@@ -717,14 +715,6 @@ function GenCL({ items, session, onUpdate }) {
   };
   const setBP = (id, v) => { const bp = { ...bienphap, [id]: v }; setBienphap(bp); persist(results, bp, photos, meta); };
   const setM = (k, v) => { const m = { ...meta, [k]: v }; setMeta(m); persist(results, bienphap, photos, m); };
-
-  const addPhotos = async (id, files) => {
-    setUploading(u => ({ ...u, [id]: true }));
-    const compressed = (await Promise.all([...files].map(compressImage))).filter(Boolean);
-    const ph = { ...photos, [id]: [...(photos[id] || []), ...compressed] };
-    setPhotos(ph); persist(results, bienphap, ph, meta);
-    setUploading(u => ({ ...u, [id]: false }));
-  };
 
   const removePhoto = (id, idx) => {
     const arr = (photos[id] || []).filter((_, i) => i !== idx);
@@ -795,17 +785,8 @@ function GenCL({ items, session, onUpdate }) {
                 <button style={bS(rs === "d", "#22c55e")} onClick={() => setR(it.id, "d")}>✅ Đạt</button>
                 <button style={bS(rs === "k", "#ef4444")} onClick={() => setR(it.id, "k")}>❌ KĐạt</button>
                 <button style={bS(rs === "n", "#64748b")} onClick={() => setR(it.id, "n")}>— N/A</button>
-                <label style={{ width: 44, height: 44, borderRadius: 10, background: itemPhotos.length > 0 ? "#eff6ff" : "#f1f5f9", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
-                  {uploading[it.id]
-                    ? <div style={{ width: 18, height: 18, border: "2px solid " + NAVY, borderTopColor: "transparent", borderRadius: 99, animation: "spin 0.7s linear infinite" }} />
-                    : <Ic n="cam" s={18} c={itemPhotos.length > 0 ? NAVY : "#94a3b8"} />}
-                  {itemPhotos.length > 0 && !uploading[it.id] && (
-                    <span style={{ position: "absolute", top: -5, right: -5, background: NAVY, color: "#fff", borderRadius: 99, fontSize: 9, fontWeight: 700, width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>{itemPhotos.length}</span>
-                  )}
-                  <input type="file" accept="image/*" capture="environment" multiple onChange={e => { addPhotos(it.id, e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
-                </label>
               </div>
-              {/* Photo thumbnails */}
+              {/* Ảnh cũ (trước 10/2026) — chỉ xem/xoá, không chụp mới để tránh đầy bộ nhớ */}
               {itemPhotos.length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                   {itemPhotos.map((p, pi) => (
@@ -1194,7 +1175,6 @@ function NKScreen({ loiList, sLL, nkList, sNKL }) {
   const [fil, sFil] = useState("Tất cả");
   const [sf, sSF] = useState(false);
   const [form, sForm] = useState({ vt: "", mt: "", md: "Trung bình", tt: "Mới", deadline: "" });
-  const [ph, sPh] = useState([]);
   const [vp, sVP] = useState(null);
   const [closingLoi, setClosingLoi] = useState(null);
   const [closureForm, setClosureForm] = useState({ note: "", photos: [] });
@@ -1204,11 +1184,10 @@ function NKScreen({ loiList, sLL, nkList, sNKL }) {
   const shown = fil === "Tất cả" ? loiList
     : fil === "Quá hạn" ? loiList.filter(l => l.deadline && l.deadline < today2 && l.tt !== "Đã xong")
     : loiList.filter(l => l.tt === fil);
-  const hPh = e => { Array.from(e.target.files).forEach(f => { const r = new FileReader(); r.onload = ev => sPh(p => [...p, ev.target.result]); r.readAsDataURL(f); }); e.target.value = ""; };
   const addL = () => {
     if (!form.vt || !form.mt) return;
-    sLL(p => [{ ...form, id: Date.now(), ng: new Date().toISOString().slice(0, 10), ph: [...ph] }, ...p]);
-    sForm({ vt: "", mt: "", md: "Trung bình", tt: "Mới", deadline: "" }); sPh([]); sSF(false);
+    sLL(p => [{ ...form, id: Date.now(), ng: new Date().toISOString().slice(0, 10), ph: [] }, ...p]);
+    sForm({ vt: "", mt: "", md: "Trung bình", tt: "Mới", deadline: "" }); sSF(false);
   };
   const mMD = { "Cao": "#ef4444", "Trung bình": "#f59e0b", "Thấp": "#22c55e" };
   const mTT = { "Mới": { bg: "#fef2f2", c: "#ef4444" }, "Đang xử lý": { bg: "#fffbeb", c: "#d97706" }, "Đã xong": { bg: "#f0fdf4", c: "#16a34a" } };
@@ -1253,7 +1232,6 @@ function NKScreen({ loiList, sLL, nkList, sNKL }) {
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>📅 Hạn khắc phục</div><input type="date" value={form.deadline} onChange={e => sForm(p => ({ ...p, deadline: e.target.value }))} style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", ...T }} />
         </div>
-        <div style={{ marginBottom: 12 }}><div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>📸 Ảnh</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{ph.map((p, i) => <div key={i} style={{ position: "relative", width: 60, height: 60, borderRadius: 10, overflow: "hidden", border: "2px solid #e2e8f0" }}><img src={p} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" /><button onClick={() => sPh(ps => ps.filter((_, j) => j !== i))} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: 99, background: "#ef4444", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Ic n="x" s={9} c="#fff" /></button></div>)}<label style={{ width: 60, height: 60, borderRadius: 10, border: "2px dashed #cbd5e1", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#f8fafc", flexDirection: "column" }}><Ic n="cam" s={18} c="#94a3b8" /><span style={{ fontSize: 8, color: "#94a3b8" }}>Thêm</span><input type="file" accept="image/*" capture="environment" multiple onChange={hPh} style={{ display: "none" }} /></label></div></div>
         <button onClick={addL} style={{ width: "100%", padding: 13, background: NAVY, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", ...T }}>Lưu tồn tại</button>
       </div>}
       {shown.map(loi => <div key={loi.id} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: "1.5px solid #e2e8f0" }}>
@@ -1292,13 +1270,6 @@ function NKScreen({ loiList, sLL, nkList, sNKL }) {
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Ghi chú biện pháp xử lý *</div>
             <textarea value={closureForm.note} onChange={e => setClosureForm(f => ({ ...f, note: e.target.value }))} placeholder="Mô tả cách đã khắc phục tồn tại..." rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>📸 Ảnh bằng chứng (tùy chọn)</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {closureForm.photos.map((p, i) => <div key={i} style={{ position: "relative", width: 60, height: 60, borderRadius: 10, overflow: "hidden", border: "2px solid #e2e8f0" }}><img src={p} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" /><button onClick={() => setClosureForm(f => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: 99, background: "#ef4444", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Ic n="x" s={9} c="#fff" /></button></div>)}
-              <label style={{ width: 60, height: 60, borderRadius: 10, border: "2px dashed #cbd5e1", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#f8fafc", flexDirection: "column" }}><Ic n="cam" s={18} c="#94a3b8" /><span style={{ fontSize: 8, color: "#94a3b8" }}>Thêm</span><input type="file" accept="image/*" capture="environment" multiple onChange={async e => { const imgs = (await Promise.all([...e.target.files].map(compressImage))).filter(Boolean); setClosureForm(f => ({ ...f, photos: [...f.photos, ...imgs] })); e.target.value = ""; }} style={{ display: "none" }} /></label>
-            </div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setClosingLoi(null)} style={{ flex: 1, padding: 13, background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", ...T }}>Hủy</button>
@@ -1535,8 +1506,15 @@ function WeeklyReportScreen({ loiList, nkList, samp, sessions = [] }) {
               <span style={{ fontWeight: 700, color: c }}>≈ {(used / 1048576).toFixed(1)} / 5 MB ({pct}%)</span>
             </div>
             <div style={{ height: 8, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}><div style={{ width: pct + "%", height: "100%", background: c }} /></div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>Ảnh chiếm phần lớn dung lượng (~25–40 ảnh là đầy). Trên 70% → sao lưu rồi xóa bớt phiên cũ. Ước tính — giới hạn thực tế tùy trình duyệt.</div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>App không lưu ảnh nữa (ảnh hiện trường để ở máy ảnh / Zalo). Ảnh cũ còn lại chiếm phần lớn dung lượng. Ước tính — giới hạn thực tế tùy trình duyệt.</div>
           </div>;
+        })()}
+        {(() => {
+          const n = countPhotos();
+          return <button disabled={n === 0} onClick={() => {
+            if (!window.confirm(`Xoá ${n} ảnh cũ khỏi mọi phiên nghiệm thu và tồn tại?\n\nKết quả, ghi chú, biện pháp… giữ nguyên — chỉ xoá ảnh.\nKHÔNG hoàn tác được. Nếu cần giữ ảnh, bấm Hủy và Sao lưu trước.`)) return;
+            purgeAllPhotos(); window.location.reload();
+          }} style={{ width: "100%", marginTop: 12, padding: 12, background: n ? "#fef2f2" : "#f8fafc", color: n ? "#dc2626" : "#cbd5e1", border: "1.5px solid " + (n ? "#fecaca" : "#e2e8f0"), borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: n ? "pointer" : "not-allowed", ...T }}>🗑️ Xoá toàn bộ ảnh cũ ({n} ảnh)</button>;
         })()}
       </div>
     </div>}
