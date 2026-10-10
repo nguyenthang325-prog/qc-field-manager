@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 const NAVY = "#1e3a8a";
@@ -402,9 +402,18 @@ const nkInit = [
 ];
 
 // ── SESSION MANAGEMENT ────────────────────────────────────────────────────────
+// Ghi localStorage; khi đầy (QuotaExceeded) phát sự kiện để App hiện cảnh báo thay vì nuốt lỗi im lặng
+const lsSet = (key, str) => {
+  try { localStorage.setItem(key, str); return true; }
+  catch (e) { console.warn("localStorage full", e); window.dispatchEvent(new Event("qcm-storage-full")); return false; }
+};
+// Ước tính dung lượng localStorage đã dùng (số ký tự key+value; trình duyệt giới hạn ~5 triệu ký tự/trang)
+const LS_LIMIT = 5 * 1024 * 1024;
+const lsUsage = () => { let n = 0; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); n += k.length + (localStorage.getItem(k) || "").length; } } catch { /* bỏ qua */ } return n; };
+
 const SESS_KEY = "qcm_sessions";
 const getSessions = () => { try { const s = localStorage.getItem(SESS_KEY); return s ? JSON.parse(s) : []; } catch { return []; } };
-const saveSessions = arr => { try { localStorage.setItem(SESS_KEY, JSON.stringify(arr)); } catch (e) { console.warn("localStorage full", e); } };
+const saveSessions = arr => { lsSet(SESS_KEY, JSON.stringify(arr)); };
 const upsertSession = sess => {
   const all = getSessions(), idx = all.findIndex(s => s.id === sess.id);
   const next = idx >= 0 ? [...all.slice(0, idx), sess, ...all.slice(idx + 1)] : [sess, ...all];
@@ -933,7 +942,7 @@ function XLSXScreen() {
   const [upErr, sUpErr] = useState("");
   const [loading, sLoading] = useState(false);
 
-  const saveTemplates = v => { try { localStorage.setItem("qcm_xlsx_list", JSON.stringify(v)); } catch {} setTemplates(v); };
+  const saveTemplates = v => { lsSet("qcm_xlsx_list", JSON.stringify(v)); setTemplates(v); };
 
   const handleUpload = e => {
     const file = e.target.files[0]; if (!file) return;
@@ -1108,7 +1117,7 @@ function CLScreen({ setST }) {
   const init = () => { try { const s = localStorage.getItem(SK); if (s) return JSON.parse(s); } catch { } return {}; };
   const [ck, sCk] = useState(init);
   const [oc, sOC] = useState(1);
-  const sC = fn => { sCk(p => { const n = fn(p); try { localStorage.setItem(SK, JSON.stringify(n)); } catch { } return n; }); };
+  const sC = fn => { sCk(p => { const n = fn(p); lsSet(SK, JSON.stringify(n)); return n; }); };
   const total = clData.reduce((a, c) => a + c.items.length, 0), done = Object.values(ck).filter(v => v === true).length, pct = Math.round((done / total) * 100);
   const tog = (k, v) => sC(p => ({ ...p, [k]: p[k] === v ? undefined : v }));
 
@@ -1211,7 +1220,7 @@ function NKScreen({ loiList, sLL, nkList, sNKL }) {
 
   const svNK = v => {
     const n = typeof v === "function" ? v(nkList) : v;
-    try { localStorage.setItem("qcm_nk", JSON.stringify(n)); } catch { }
+    lsSet("qcm_nk", JSON.stringify(n));
     sNKL(n);
   };
 
@@ -1338,7 +1347,7 @@ function TNScreen({ samp, setSamp }) {
 
   const svS = v => {
     const n = typeof v === "function" ? v(samp) : v;
-    try { localStorage.setItem("qcm_sp", JSON.stringify(n)); } catch { }
+    lsSet("qcm_sp", JSON.stringify(n));
     setSamp(n);
   };
 
@@ -1423,7 +1432,7 @@ function getWeekRange(offset = 0) {
 }
 
 const initSettings = () => { try { const s = localStorage.getItem("qcm_settings"); if (s) return JSON.parse(s); } catch {} return { congtrinh: "", hangmuc: "", mahieu: "", diachi: "", chudt: "", tvgs: "", nhathau: "", ksphutrach: "", email: "" }; };
-const saveSettings = v => { try { localStorage.setItem("qcm_settings", JSON.stringify(v)); } catch {} };
+const saveSettings = v => { lsSet("qcm_settings", JSON.stringify(v)); };
 
 function WeeklyReportScreen({ loiList, nkList, samp, sessions = [] }) {
   const [settings, setSettings] = useState(initSettings);
@@ -1517,6 +1526,18 @@ function WeeklyReportScreen({ loiList, nkList, samp, sessions = [] }) {
           <label style={{ flex: 1, padding: 13, background: "#f1f5f9", color: NAVY, borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: "pointer", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", ...T }}>⬆️ Phục hồi<input type="file" accept="application/json,.json" onChange={handleImport} style={{ display: "none" }} /></label>
         </div>
         <div style={{ fontSize: 11, color: "#dc2626", marginTop: 10 }}>⚠️ Phục hồi sẽ ghi đè toàn bộ dữ liệu hiện tại.</div>
+        {(() => {
+          const used = lsUsage(), pct = Math.min(100, Math.round(used / LS_LIMIT * 100));
+          const c = pct >= 90 ? "#dc2626" : pct >= 70 ? "#f59e0b" : "#22c55e";
+          return <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#374151", marginBottom: 6 }}>
+              <span style={{ fontWeight: 600 }}>📦 Bộ nhớ thiết bị đã dùng</span>
+              <span style={{ fontWeight: 700, color: c }}>≈ {(used / 1048576).toFixed(1)} / 5 MB ({pct}%)</span>
+            </div>
+            <div style={{ height: 8, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}><div style={{ width: pct + "%", height: "100%", background: c }} /></div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>Ảnh chiếm phần lớn dung lượng (~25–40 ảnh là đầy). Trên 70% → sao lưu rồi xóa bớt phiên cũ. Ước tính — giới hạn thực tế tùy trình duyệt.</div>
+          </div>;
+        })()}
       </div>
     </div>}
     {activeTab === "analytics" && (() => {
@@ -1793,19 +1814,27 @@ export default function App() {
   // Wrapper tự động lưu localStorage
   const sLL = v => {
     const n = typeof v === "function" ? v(loiList) : v;
-    try { localStorage.setItem("qcm_loi", JSON.stringify(n)); } catch { }
+    lsSet("qcm_loi", JSON.stringify(n));
     sLL_raw(n);
   };
   const sNKL = v => {
     const n = typeof v === "function" ? v(nkList) : v;
-    try { localStorage.setItem("qcm_nk", JSON.stringify(n)); } catch { }
+    lsSet("qcm_nk", JSON.stringify(n));
     sNKL_raw(n);
   };
   const setSamp = v => {
     const n = typeof v === "function" ? v(samp) : v;
-    try { localStorage.setItem("qcm_sp", JSON.stringify(n)); } catch { }
+    lsSet("qcm_sp", JSON.stringify(n));
     setSamp_raw(n);
   };
+
+  // Cảnh báo bộ nhớ đầy — lsSet phát sự kiện mỗi khi ghi thất bại
+  const [storageFull, sStorageFull] = useState(false);
+  useEffect(() => {
+    const on = () => sStorageFull(true);
+    window.addEventListener("qcm-storage-full", on);
+    return () => window.removeEventListener("qcm-storage-full", on);
+  }, []);
 
   const nc = loiList.filter(l => l.tt === "Mới").length;
   const hTab = t => { sTab(t); sST(null); setActiveSession(null); };
@@ -1844,6 +1873,15 @@ export default function App() {
       <button onClick={() => activeSession ? setActiveSession(null) : st ? sST(null) : hTab("home")} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><Ic n="back" s={20} c="#fff" /></button>
       <div><div style={{ color: "#fff", fontSize: 15, fontWeight: 700 }}>{hT}</div>{hS && <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>{hS}</div>}</div>
     </div> : <div style={{ background: NAVY, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>QC Field Manager</div><div style={{ color: "rgba(255,255,255,0.65)", fontSize: 12 }}>{new Date().toLocaleDateString("vi-VN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div><div style={{ background: "rgba(255,255,255,0.15)", borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}><span style={{ fontSize: 10 }}>💾</span><span style={{ color: "rgba(255,255,255,0.9)", fontSize: 10.5, fontWeight: 600 }}>Tự lưu</span></div></div>}
+
+    {storageFull && <div style={{ background: "#fef2f2", borderBottom: "2px solid #dc2626", padding: "10px 16px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <div style={{ flex: 1, fontSize: 12.5, color: "#991b1b", lineHeight: 1.5 }}>
+        <div style={{ fontWeight: 700, marginBottom: 2 }}>⚠️ Bộ nhớ thiết bị đã đầy — dữ liệu vừa nhập CHƯA được lưu</div>
+        Tải lại trang sẽ mất phần vừa nhập. Hãy Sao lưu ngay, rồi xóa bớt phiên nghiệm thu / ảnh cũ để giải phóng chỗ trước khi nhập tiếp.
+        <button onClick={exportAllData} style={{ display: "block", marginTop: 8, padding: "8px 14px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer", ...T }}>⬇️ Sao lưu ngay</button>
+      </div>
+      <button onClick={() => sStorageFull(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#991b1b", cursor: "pointer", width: 44, height: 44, flexShrink: 0 }}>×</button>
+    </div>}
 
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 90, paddingTop: 12 }}>
       {tab === "home" && !st && <Dash setTab={hTab} loiList={loiList} nkList={nkList} samp={samp} />}

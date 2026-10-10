@@ -15,12 +15,12 @@ No test suite is configured.
 
 ## Architecture
 
-This is a **mobile-first PWA** built with React 19 + Vite. The entire application lives in a single file: [src/App.jsx](src/App.jsx) (~1746 lines). There is no router — navigation is managed entirely through React `useState`.
+This is a **mobile-first PWA** built with React 19 + Vite. The entire application lives in a single file: [src/App.jsx](src/App.jsx) (~1820 lines). There is no router — navigation is managed entirely through React `useState`.
 
 ### Navigation model
 
 The root `App` component owns three pieces of navigation state:
-- `tab` — active main section: `"home"` | `"checklist"` | `"nhatky"` | `"thinghiem"` | `"baocao"` | `"maubieu"` | `"tcvn"` | `"saiso"`
+- `tab` — active main section: `"home"` | `"checklist"` | `"nhatky"` | `"thinghiem"` | `"baocao"` | `"maubieu"` | `"tcvn"` | `"saiso"` | `"kiemsoat"`
 - `st` — checklist subtype (e.g. `"ct"`, `"vk"`, `"bt"`, `"ht_xay"`, `"tm"`, etc.)
 - `activeSession` — the currently open checklist session object
 
@@ -40,6 +40,7 @@ The checklist flow is three levels deep: `CLScreen` (category picker) → `Sessi
 | `XLSXScreen` | `maubieu` | Upload owner-provided `.xlsx` forms, fill result columns, export PDF |
 | `TCVNScreen` | `tcvn` | Searchable TCVN standards + NĐ 06/2021 legal reference |
 | `SSScreen` | `saiso` | Construction tolerance quick-reference table |
+| `ControlScreen` | `kiemsoat` | Kiểm soát hồ sơ: danh mục Mã BB, cờ đã/chưa xuất YCNT-BBNT theo từng phiên nghiệm thu |
 | `EmgModal` | FAB (any tab) | Emergency step-by-step guides (concrete in rain, failed samples) |
 | `DefectModal` | inside `GenCL` | "Lỗi thường gặp" warnings for the current checklist type — flat cards, no drill-down (unlike `EmgModal`) |
 
@@ -72,6 +73,8 @@ All reference data is hardcoded as constants near the top of [src/App.jsx](src/A
 | `qcm_settings` | Project settings for weekly report |
 
 Shared state (`loiList`, `nkList`, `samp`) is lifted to `App` and passed down; wrapper setters auto-persist to localStorage. Photos are compressed to 900px JPEG 72% before storage (`compressImage()`).
+
+**Mọi lệnh ghi localStorage phải đi qua `lsSet(key, str)`** (đầu mục SESSION MANAGEMENT) — không viết `try { localStorage.setItem(...) } catch {}` mới. `lsSet` phát sự kiện `qcm-storage-full` khi ghi thất bại → `App` hiện banner đỏ. Ngoại lệ duy nhất: `importAllData` (lỗi đã báo qua `onDone(err)`). Giới hạn ~5 triệu ký tự/trang (`LS_LIMIT`); ảnh base64 ~110–200 KB/tấm → **~25–40 ảnh là đầy**.
 
 ### PDF export
 
@@ -227,14 +230,15 @@ eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
 
 ---
 
-## Trạng thái hiện tại (2026-06-25 — không thay đổi từ 2026-06-16)
+## Trạng thái hiện tại (rà soát 2026-10-10)
 
 | Hạng mục | Trạng thái |
 |---|---|
-| Production URL | ✅ `https://qc-field-manager.vercel.app` — live, build READY trên commit mới nhất |
-| Build | ✅ Pass, ~190ms |
+| Production URL | ✅ `https://qc-field-manager.vercel.app` — HTTP 200, bundle khớp hash build local của `f1315f7` |
+| Build | ✅ Pass, ~200–400ms; bundle 686 KB (gần mốc 700 KB tự đặt) |
 | Lint | ✅ 0 lỗi |
-| Service worker cache | ✅ `qcf-v6` |
+| Service worker cache | ✅ `qcf-v6` + hậu tố tự bump (`qcf-v6-b20260828025900` trên prod tại 10/10) |
+| `xlsx` 0.18.5 | ⚠️ `npm audit`: 2 lỗ hổng high (Prototype Pollution, ReDoS), npm không có bản vá — cần chuyển sang tarball SheetJS CDN 0.20.x nếu muốn vá. Chỉ dùng khi upload mẫu `.xlsx` từ TVGS/CĐT → rủi ro thực tế thấp |
 | Vercel Root Directory | ✅ `.` (rỗng — standalone repo từ 25/06/2026) |
 | Git repo | ✅ `nguyenthang325-prog/qc-field-manager` standalone tại `d:\HOC TAP\APP\qc-field-manager\` |
 | Sprint 3 — Bước 1 Nền tảng | ✅ Live |
@@ -276,6 +280,30 @@ Bối cảnh: rà soát pháp lý toàn kho tri thức phát hiện **Nghị đ�
 
 ---
 
+### Sprint 6: Mã BB tự sinh + Kiểm soát hồ sơ (2026-08-28) — ✅ Live (commit `f1315f7`)
+
+Phục vụ vai trò Chỉ huy phó nội nghiệp (kiểm soát, không trực tiếp làm hồ sơ).
+
+- **`genMaBB(session, settings)`** — mã `[viết tắt hạng mục]-[LOẠI]-[STT]` (vd hạng mục "Phần thân - Tầng 5" → `PTT5-CT-3`); `initialsTag` bỏ dấu tiếng Việt, giữ số cuối nếu ≤4 ký tự. STT = số session đã có mã cùng tiền tố + 1 — **tính từ session hiện có, không lưu bộ đếm riêng**.
+- **`markExported(session, "ycnt"|"bbnt")`** — gọi khi bấm Phiếu YCNT / Biên bản NT: gán `maBB` (giữ mã cũ nếu đã có) + cờ `exportedYCNT`/`exportedBBNT` trên session. Mã in trên đầu cả 2 mẫu PDF.
+- **`ControlScreen`** (tab `kiemsoat`, thẻ đầu tiên trên Dashboard) — bảng toàn bộ phiên nghiệm thu: Mã BB, loại · vị trí, ngày, đã xuất YCNT/BBNT, kết luận; lọc theo loại. Phát hiện hồ sơ còn thiếu.
+- Trường mới trên session (`maBB`, `exportedYCNT`, `exportedBBNT`) đều optional → session cũ hiện "Chưa cấp".
+
+---
+
+### Sprint 7: Cảnh báo bộ nhớ đầy (2026-10-10) — ✅ Code xong, verify trên browser
+
+Rà soát sau 6 tuần không dùng phát hiện: **9 chỗ ghi localStorage nuốt lỗi im lặng** (`catch {}`) → khi đầy quota, UI vẫn hiện dữ liệu nhưng tải lại trang là mất, không có dấu hiệu gì. Với ảnh base64 trong session, ~25–40 ảnh là chạm giới hạn.
+
+- **`lsSet(key, str)`** thay toàn bộ 9 chỗ `try{setItem}catch{}`; thất bại → `window.dispatchEvent(new Event("qcm-storage-full"))`
+- **Banner đỏ trong `App`** (giữa header và nội dung, mọi tab): "Bộ nhớ thiết bị đã đầy — dữ liệu vừa nhập CHƯA được lưu" + nút "⬇️ Sao lưu ngay" (`exportAllData`) + nút × đóng. Hiện lại ở lần ghi thất bại tiếp theo.
+- **Thanh dung lượng** trong Báo cáo → Cài đặt (khối Sao lưu): `lsUsage()` / `LS_LIMIT`, xanh <70%, cam 70–89%, đỏ ≥90%.
+- **Giới hạn đã biết:** "Sao lưu ngay" chỉ sao lưu phần ĐÃ lưu trong localStorage — phần vừa nhập bị từ chối nằm trong state bộ nhớ, không vào file backup. Banner nói rõ điều này. Sửa tận gốc = chuyển ảnh sang IndexedDB (chưa làm, chờ khi dùng lại cho dự án nhiều ảnh).
+
+**Verify (Chrome, `vite preview`):** golden path thanh hiện `≈ 0.0 / 5 MB (0%)`; edge case nhồi đầy localStorage rồi gõ vào ô cài đặt → banner hiện, thanh `≈ 5.0 / 5 MB (100%)` màu đỏ (khớp giới hạn thật của Chrome); nút × ẩn banner. **Build:** ✅ 197ms. **Lint:** ✅ 0 lỗi.
+
+---
+
 ## Bước tiếp theo gợi ý
 
 ### Ưu tiên cao
@@ -302,7 +330,7 @@ Bối cảnh: rà soát pháp lý toàn kho tri thức phát hiện **Nghị đ�
 | CSS bar chart, không dùng library | Giữ bundle < 700KB; app phải hoạt động offline |
 | IIFE pattern cho analytics | Scope biến cục bộ trong JSX mà không cần tách component mới |
 | `--include=dev` trong installCommand | Vercel đặt `NODE_ENV=production` → npm bỏ qua devDependencies → vite không tìm thấy |
-| Bump SW cache key khi deploy | Stale-while-revalidate phục vụ cached bundle trước; nếu không bump key, người dùng bị kẹt ở bản cũ vô thời hạn |
+| SW cache key tự bump khi build (plugin `sw-cache-bump`, từ 05/07/2026) | Stale-while-revalidate phục vụ cached bundle trước; không đổi key thì người dùng kẹt ở bản cũ vô thời hạn — plugin bỏ bước sửa tay hay bị quên |
 | Backward-compatible data model | Các trường `thauphu`, `deadline`... là optional → dữ liệu lỗi cũ trong localStorage không bị break |
 | `settings` đọc qua `initSettings()` tại thời điểm export, không truyền props | Cùng pattern với các hàm đọc localStorage khác trong file; không cần đổi chữ ký props của `GenCL` |
 | `DefectModal` tách riêng, không tái dùng `EmgModal` | `EmgModal` có drill-down 2 cấp + urgency badge cho tình huống khẩn cấp nhiều bước; `defectData` chỉ là cảnh báo ngắn 1 cấp — ép chung 1 component sẽ phải thêm mode switch không cần thiết |
