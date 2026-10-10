@@ -237,7 +237,7 @@ eac4ee1 fix: install devDependencies on Vercel to resolve vite not found
 | Hạng mục | Trạng thái |
 |---|---|
 | Production URL | ✅ `https://qc-field-manager.vercel.app` — `bd8c234` live 10/10 (bundle `index-BGzw5iXR.js`) |
-| Auto-deploy GitHub → Vercel | ❌ **HỎNG từ sau 28/08** — push `bd8c234` lên `main` ngày 10/10: GitHub không có commit status, Vercel không có deployment nào. Đã deploy tay bằng `vercel --prod --yes` (từ thư mục app). Cần kết nối lại ở Vercel Dashboard → qc-field-manager → Settings → Git. **Đến khi sửa: sau mỗi push phải chạy `vercel --prod --yes` và kiểm tra hash bundle trên prod** |
+| Auto-deploy GitHub → Vercel | ✅ Hoạt động (kết nối từ 15/05). Lưu ý 10/10: push `f1315f7..bd8c234` bị Vercel **bỏ lỡ 1 lần** (không commit status, không deployment) → đã deploy tay `vercel --prod --yes`; push kế tiếp `ea52862` thì tự deploy bình thường. **Sau push nên kiểm tra:** `gh api repos/nguyenthang325-prog/qc-field-manager/commits/<sha>/status` có context `Vercel` = success; nếu sau ~3 phút vẫn `pending` + 0 status → chạy `vercel --prod --yes` |
 | Build | ✅ Pass, ~200–400ms; bundle 686 KB (gần mốc 700 KB tự đặt) |
 | Lint | ✅ 0 lỗi |
 | Service worker cache | ✅ `qcf-v6` + hậu tố tự bump (`qcf-v6-b20260828025900` trên prod tại 10/10) |
